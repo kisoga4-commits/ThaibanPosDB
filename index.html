@@ -14,10 +14,13 @@
           const installingWorker = reg.installing;
           installingWorker.onstatechange = () => {
             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              if(confirm('🎉 พบระบบ V11.2.4 ใหม่! (บังคับรีเฟรชเพื่อเคลียร์แคช) ข้อมูลสินค้าไม่หาย')) {
-                installingWorker.postMessage({ type: 'SKIP_WAITING' });
-                window.location.reload(true); 
-              }
+              // 🟢 ใช้ vConfirm ของเราเองแทนการใช้ confirm ของระบบ
+              vConfirm('พบระบบ PosThaiban V11.2.4 ใหม่! (บังคับรีเฟรชเพื่อเคลียร์แคช) ข้อมูลสินค้าไม่หาย', 'อัปเดตระบบ', '🔄').then(res => {
+                  if(res) {
+                    installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                    window.location.reload(true); 
+                  }
+              });
             }
           };
         };
@@ -89,6 +92,18 @@
 <body class="flex flex-col h-screen overflow-hidden text-slate-800 pos-active">
 
     <div id="toast-container" class="fixed top-12 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
+
+    <div id="v-modal" class="fixed inset-0 bg-slate-900/90 z-[10000] hidden flex items-center justify-center p-6 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-xs rounded-[2.5rem] p-8 text-center shadow-2xl border-2 border-indigo-500/20">
+            <div id="v-modal-icon" class="text-4xl mb-4">🔔</div>
+            <h3 id="v-modal-title" class="text-xl font-black text-slate-900 mb-2 italic">แจ้งเตือน</h3>
+            <p id="v-modal-msg" class="text-sm text-slate-500 font-bold mb-8 italic">ข้อความ...</p>
+            <div class="flex gap-3">
+                <button id="v-modal-cancel" class="flex-1 bg-slate-100 py-4 rounded-2xl font-black text-slate-500 text-xs uppercase active:scale-95">ยกเลิก</button>
+                <button id="v-modal-confirm" class="flex-[2] bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95">ตกลง</button>
+            </div>
+        </div>
+    </div>
 
     <div id="license-lock" class="fixed inset-0 bg-slate-900/95 z-[9999] flex flex-col items-center justify-center p-6 text-white hidden backdrop-blur-md overflow-y-auto">
         <div class="w-full max-w-sm bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl my-auto">
@@ -305,6 +320,32 @@
     <datalist id="category-list"></datalist>
 
     <script>
+        // 🟢 --- Custom Notification Modal ---
+        function vNotify(msg, title = "แจ้งเตือน", icon = "✅") {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('v-modal');
+                document.getElementById('v-modal-title').innerText = title;
+                document.getElementById('v-modal-msg').innerText = msg;
+                document.getElementById('v-modal-icon').innerText = icon;
+                document.getElementById('v-modal-cancel').classList.add('hidden');
+                modal.classList.remove('hidden');
+                document.getElementById('v-modal-confirm').onclick = () => { modal.classList.add('hidden'); resolve(true); };
+            });
+        }
+
+        function vConfirm(msg, title = "ยืนยันการทำรายการ", icon = "⚠️") {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('v-modal');
+                document.getElementById('v-modal-title').innerText = title;
+                document.getElementById('v-modal-msg').innerText = msg;
+                document.getElementById('v-modal-icon').innerText = icon;
+                document.getElementById('v-modal-cancel').classList.remove('hidden');
+                modal.classList.remove('hidden');
+                document.getElementById('v-modal-confirm').onclick = () => { modal.classList.add('hidden'); resolve(true); };
+                document.getElementById('v-modal-cancel').onclick = () => { modal.classList.add('hidden'); resolve(false); };
+            });
+        }
+
         // 🟢 --- Toast Function ---
         function showToast(msg) {
             const container = document.getElementById('toast-container');
@@ -387,17 +428,17 @@
                 showPage('pos'); 
             } catch (e) {
                 console.error("Init Error:", e);
-                alert("เกิดข้อผิดพลาดในการโหลดฐานข้อมูล");
+                vNotify("เกิดข้อผิดพลาดในการโหลดฐานข้อมูล", "ผิดพลาด", "❌");
             }
         }
 
-        function forceSyncUpdate() {
+        async function forceSyncUpdate() {
             if (swRegistration) {
-                swRegistration.update().then(() => {
-                    alert("✅ ตรวจสอบระบบแล้ว! (หากมีเวอร์ชันใหม่เบราว์เซอร์จะแจ้งเตือนให้โหลดใหม่)");
-                }).catch(err => alert("⚠️ การตรวจสอบล้มเหลว กรุณาเช็คอินเทอร์เน็ต"));
+                swRegistration.update().then(async () => {
+                    await vNotify("ตรวจสอบระบบแล้ว! (หากมีเวอร์ชันใหม่เบราว์เซอร์จะแจ้งเตือนให้โหลดใหม่)", "ตรวจสอบสำเร็จ", "✅");
+                }).catch(async err => await vNotify("การตรวจสอบล้มเหลว กรุณาเช็คอินเทอร์เน็ต", "ผิดพลาด", "⚠️"));
             } else {
-                alert("⚠️ ระบบยังไม่พร้อมอัปเดต กรุณารีเฟรชหน้าจอ 1 ครั้ง (ตอนมีเน็ต)");
+                await vNotify("ระบบยังไม่พร้อมอัปเดต กรุณารีเฟรชหน้าจอ 1 ครั้ง (ตอนมีเน็ต)", "แจ้งเตือน", "⚠️");
             }
         }
 
@@ -417,21 +458,22 @@
 
         function showLockScreen() { document.getElementById('license-lock').classList.remove('hidden'); }
         function closeLockScreen() { document.getElementById('license-lock').classList.add('hidden'); }
-        function copyHWID() { const copyText = document.getElementById('display-hw-id'); copyText.select(); document.execCommand("copy"); alert("คัดลอกรหัสเครื่อง: " + copyText.value + " ส่งให้แอดมินได้เลย"); }
+        function copyHWID() { const copyText = document.getElementById('display-hw-id'); copyText.select(); document.execCommand("copy"); showToast("คัดลอกรหัสเครื่องแล้ว ส่งให้แอดมินได้เลย"); }
 
         async function unlockSystem() {
             const inputKey = document.getElementById('lic-key').value.trim().toUpperCase();
-            if(!inputKey) return alert("กรุณากรอก LICENSE KEY");
+            if(!inputKey) return vNotify("กรุณากรอก LICENSE KEY", "แจ้งเตือน", "⚠️");
             
             const expectedKey = await generateUnlockKey(currentHWID);
             if(inputKey === expectedKey) {
                 let conf = await vdb.settings.get('config');
                 conf.licenseKey = expectedKey;
                 await vdb.settings.put(conf);
-                alert("🎉 ปลดล็อค V11 PRO สำเร็จ! ขอบคุณที่สนับสนุน");
+                await vNotify("ปลดล็อค V11 PRO สำเร็จ! ขอบคุณที่สนับสนุน", "สำเร็จ", "🎉");
                 location.reload(); 
             } else {
-                playSound('warn'); alert("LICENSE KEY ไม่ถูกต้อง!");
+                playSound('warn'); 
+                vNotify("LICENSE KEY ไม่ถูกต้อง!", "ผิดพลาด", "❌");
             }
         }
 
@@ -467,7 +509,7 @@
             
             await vdb.settings.put(conf);
             applySettingsToUI(conf);
-            alert("บันทึกตั้งค่าเรียบร้อย!");
+            vNotify("บันทึกตั้งค่าเรียบร้อย!", "สำเร็จ", "✅");
         }
 
         async function showPage(n) {
@@ -480,18 +522,18 @@
         }
 
         async function toggleAdmin() { 
-            if(isAdmin) { alert("คุณอยู่ในระบบ Admin แล้ว"); } else {
+            if(isAdmin) { vNotify("คุณอยู่ในระบบ Admin แล้ว", "แจ้งเตือน", "🛡️"); } else {
                 let conf = await vdb.settings.get('config');
                 const p = prompt("รหัส Admin:"); 
                 if(p === conf.password) { 
                     isAdmin = true; localStorage.setItem('vpos_admin', 'true'); 
                     document.getElementById('admin-btn').innerText = '🔓 ADMIN'; 
                     document.getElementById('btn-clear-sales').classList.remove('hidden');
-                } else if(p!==null) alert("รหัสผิด!"); 
+                } else if(p!==null) vNotify("รหัสผิด!", "ผิดพลาด", "❌"); 
             }
         }
-        function logoutAdmin() { isAdmin = false; localStorage.removeItem('vpos_admin'); alert("ออกจากระบบ Admin เรียบร้อย"); location.reload(); } 
-        function checkAdminAccess(p) { if(isAdmin) showPage(p); else alert("เข้าสู่ระบบ (Login) ก่อนครับ!"); }
+        async function logoutAdmin() { isAdmin = false; localStorage.removeItem('vpos_admin'); await vNotify("ออกจากระบบ Admin เรียบร้อย"); location.reload(); } 
+        function checkAdminAccess(p) { if(isAdmin) showPage(p); else vNotify("เข้าสู่ระบบ (Login) ก่อนครับ!", "แจ้งเตือน", "🔒"); }
 
         async function renderInventory() {
             const list = document.getElementById('inventory-list');
@@ -509,7 +551,9 @@
         }
         
         async function deleteItem(id) { 
-            if(confirm('ต้องการลบสินค้านี้ใช่หรือไม่?')) { await vdb.inventory.delete(id); await renderInventory(); await renderPOS(); } 
+            if(await vConfirm('ต้องการลบสินค้านี้ใช่หรือไม่?', 'ยืนยันการลบ', '🗑️')) { 
+                await vdb.inventory.delete(id); await renderInventory(); await renderPOS(); 
+            } 
         }
 
         async function addItem() { 
@@ -545,6 +589,7 @@
                 await vdb.inventory.put(itemData);
             } 
             resetInvForm(); await renderInventory(); await renderPOS(); 
+            showToast("บันทึกข้อมูลสำเร็จ");
         }
 
         async function editItem(id) { 
@@ -555,6 +600,7 @@
             document.getElementById('cancel-edit-btn').classList.remove('hidden'); 
             window.scrollTo({ top: 0, behavior: 'smooth' }); 
         }
+        
         function resetInvForm() { 
             document.getElementById('edit-id').value = ''; 
             ['inv-barcode','inv-name','inv-price','inv-qty','inv-cat'].forEach(id => document.getElementById(id).value = ''); 
@@ -662,10 +708,11 @@
         }
 
         async function clearAllSales() { 
-            if(!isAdmin) return alert("เฉพาะ Admin"); 
-            if(confirm("⚠️ ล้างยอดขายทั้งหมด จะไม่สามารถกู้คืนได้ ยืนยันไหม?")) { 
+            if(!isAdmin) return vNotify("เฉพาะ Admin เท่านั้น", "แจ้งเตือน", "❌"); 
+            if(await vConfirm("⚠️ ล้างยอดขายทั้งหมด จะไม่สามารถกู้คืนได้ ยืนยันไหม?", "ยืนยันการลบ", "🗑️")) { 
                 await vdb.sales.clear(); 
-                await renderReport(); alert("ล้างเรียบร้อย"); 
+                await renderReport(); 
+                vNotify("ล้างยอดขายเรียบร้อย", "สำเร็จ", "✅"); 
             } 
         }
 
@@ -692,7 +739,7 @@
                     const data = JSON.parse(e.target.result); 
                     if(data.settings && data.inventory) { 
                         if(data.metadata && data.metadata.hwid !== currentHWID) {
-                            if(!confirm("⚠️ นำเข้าจากเครื่องอื่น (HWID ไม่ตรงกัน) ระบบจะให้ปลดล็อคอีกครั้ง ยืนยันนำเข้าไหม?")) return;
+                            if(!(await vConfirm("⚠️ นำเข้าจากเครื่องอื่น (HWID ไม่ตรงกัน) ระบบจะให้ปลดล็อคอีกครั้ง ยืนยันนำเข้าไหม?", "คำเตือนระบบ", "⚠️"))) return;
                             data.settings.licenseKey = ""; 
                         }
                         await vdb.transaction('rw', vdb.settings, vdb.inventory, vdb.sales, async () => {
@@ -700,9 +747,10 @@
                             await vdb.inventory.clear(); await vdb.inventory.bulkPut(data.inventory);
                             await vdb.sales.clear(); if(data.sales) await vdb.sales.bulkPut(data.sales);
                         });
-                        alert("กู้คืนข้อมูลสำเร็จ ระบบจะทำการรีเฟรชหน้าจอ"); location.reload(); 
-                    } else { alert("ไฟล์ฐานข้อมูลไม่ถูกต้อง!"); }
-                } catch(err) { console.error(err); alert("เกิดข้อผิดพลาดในการอ่านไฟล์ JSON!"); } 
+                        await vNotify("กู้คืนข้อมูลสำเร็จ ระบบจะทำการรีเฟรชหน้าจอ", "สำเร็จ", "✅");
+                        location.reload(); 
+                    } else { vNotify("ไฟล์ฐานข้อมูลไม่ถูกต้อง!", "ผิดพลาด", "❌"); }
+                } catch(err) { console.error(err); vNotify("เกิดข้อผิดพลาดในการอ่านไฟล์ JSON!", "ผิดพลาด", "❌"); } 
             }; reader.readAsText(file); 
         }
 
@@ -725,12 +773,12 @@
 
             if(mode === 'online') {
                 let pp = conf.promptpay;
-                if(!pp) return alert("ตั้งเลขพร้อมเพย์ในหน้าตั้งค่าก่อน!");
+                if(!pp) return vNotify("ตั้งเลขพร้อมเพย์ในหน้าตั้งค่าก่อน!", "แจ้งเตือน", "⚠️");
                 pp = pp.replace(/[\s-]/g, '');
                 finalSrc = `https://promptpay.io/${pp}/${t}.png`;
                 qrImg.src = finalSrc; statusMsg.classList.add('hidden');
             } else {
-                if(!conf.staticQrImg) return alert("ยังไม่ได้อัปโหลดรูปป้าย QR ในหน้าตั้งค่า!");
+                if(!conf.staticQrImg) return vNotify("ยังไม่ได้อัปโหลดรูปป้าย QR ในหน้าตั้งค่า!", "แจ้งเตือน", "⚠️");
                 finalSrc = conf.staticQrImg; qrImg.src = finalSrc;
                 statusMsg.innerText = "⚠️ โหมด Offline: ลูกค้าต้องระบุยอดเงิน ฿" + t.toLocaleString(); statusMsg.classList.remove('hidden');
             }
@@ -772,7 +820,7 @@
 
         function openCustomerDisplay() {
             customerWindow = window.open('', 'CustomerDisplay', 'width=800,height=600');
-            if(!customerWindow) return alert("Pop-up ถูกบล็อค กรุณาอนุญาตให้เบราว์เซอร์เปิด Pop-up");
+            if(!customerWindow) return vNotify("Pop-up ถูกบล็อค กรุณาอนุญาตให้เบราว์เซอร์เปิด Pop-up", "แจ้งเตือน", "⚠️");
             let sname = document.getElementById('display-shop-name').innerText;
             customerWindow.document.write(`<html><head><title>PosThaiban - จอแสดงผลลูกค้า</title><script src="https://cdn.tailwindcss.com"><\/script><style>body{font-family:'Kanit',sans-serif;background:#0f172a;color:white;display:flex;flex-direction:column;height:100vh;padding:2rem;}</style></head><body><div class="flex justify-between items-end mb-8 border-b border-slate-700 pb-4"><h1 class="text-4xl font-black italic">รายการสินค้า</h1><h2 class="text-xl text-slate-400 font-bold">${sname}</h2></div><div id="c-cart" class="flex-1 overflow-y-auto text-3xl font-bold space-y-6"></div><div class="flex justify-between items-center mt-8 pt-8 border-t border-slate-700"><p class="text-3xl font-bold text-slate-400 uppercase">ยอดที่ต้องชำระ</p><div class="text-8xl font-black text-emerald-400 italic">฿<span id="c-total">0</span></div></div><div id="c-qr-box" class="fixed inset-0 bg-slate-900/95 hidden flex flex-col items-center justify-center z-50"><h2 class="text-5xl font-black text-white mb-10">สแกนจ่ายเงิน ฿<span id="c-qr-total"></span></h2><div class="bg-white p-6 rounded-[3rem]"><img id="c-qr-img" class="w-96 h-96 object-contain"></div></div></body></html>`);
             syncCustomerDisplay();
@@ -839,7 +887,7 @@
                     );
                 } catch (err) {
                     console.error("Camera Error:", err);
-                    alert("กล้องมีปัญหา หรือบราวเซอร์ไม่ได้รับอนุญาตให้ใช้กล้อง");
+                    vNotify("กล้องมีปัญหา หรือบราวเซอร์ไม่ได้รับอนุญาตให้ใช้กล้อง", "แจ้งเตือน", "⚠️");
                     stopScanner();
                 }
             }, 300);
