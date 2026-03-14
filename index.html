@@ -2,20 +2,19 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  // 🟢 V11.2.3: อัปเกรด Service Worker ให้บังคับลบของเก่าแล้วรีเฟรชหน้าใหม่ทันที
+  // 🟢 V11.2.4: อัปเกรด Service Worker ให้บังคับลบของเก่าแล้วรีเฟรชหน้าใหม่ทันที
   let swRegistration = null;
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js').then(reg => {
         swRegistration = reg;
-        console.log('SW Registered V11.2.3!', reg);
+        console.log('SW Registered V11.2.4!', reg);
         
         reg.onupdatefound = () => {
           const installingWorker = reg.installing;
           installingWorker.onstatechange = () => {
             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              if(confirm('🎉 พบระบบ V11.2.3 ใหม่! (บังคับรีเฟรชเพื่อเคลียร์แคช) ข้อมูลสินค้าไม่หาย')) {
-                // 🟢 สั่งให้ SW ตัวใหม่ยึดอำนาจทันที แล้วรีเฟรชหน้า
+              if(confirm('🎉 พบระบบ V11.2.4 ใหม่! (บังคับรีเฟรชเพื่อเคลียร์แคช) ข้อมูลสินค้าไม่หาย')) {
                 installingWorker.postMessage({ type: 'SKIP_WAITING' });
                 window.location.reload(true); 
               }
@@ -25,13 +24,12 @@
       }).catch(err => console.error('SW Error:', err));
     });
     
-    // ดักเมื่อ SW ตัวใหม่เข้าควบคุมสำเร็จ ให้รีเฟรชหน้าเพื่อให้โค้ดใหม่ทำงาน
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       window.location.reload();
     });
   }
 
-  // 🟢 V11.2.3: ระบบดักจับสถานะเน็ตแบบจุดไข่ปลา (ลบแถบส้มออก)
+  // 🟢 สถานะเน็ตแบบจุดไข่ปลา
   const updateNetStatusUI = () => {
       const dot = document.getElementById('net-dot');
       const txt = document.getElementById('net-txt');
@@ -58,7 +56,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0f172a">
     
-    <title>VILLAGE POS V11.2.3</title>
+    <title>PosThaiban V11.2.4</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -89,6 +87,8 @@
     </style>
 </head>
 <body class="flex flex-col h-screen overflow-hidden text-slate-800 pos-active">
+
+    <div id="toast-container" class="fixed top-12 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
 
     <div id="license-lock" class="fixed inset-0 bg-slate-900/95 z-[9999] flex flex-col items-center justify-center p-6 text-white hidden backdrop-blur-md overflow-y-auto">
         <div class="w-full max-w-sm bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl my-auto">
@@ -139,7 +139,7 @@
                         <span id="net-txt" class="text-[9px] font-bold text-emerald-500 uppercase">Online</span>
                     </div>
                 </div>
-                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.2.3 PRO (STABLE OFFLINE)</p>
+                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.2.4 PRO (STABLE OFFLINE)</p>
             </div>
         </div>
         <div class="flex gap-2">
@@ -174,7 +174,9 @@
 
         <div id="page-inventory" class="page hidden space-y-5">
             <div class="bg-white p-6 rounded-[2rem] border shadow-xl border-t-4 border-indigo-600">
-                <div class="flex justify-between items-center mb-4"><h3 id="inv-form-title" class="font-bold text-slate-800 text-base">📦 เพิ่ม/แก้ไขสินค้า</h3><button id="cancel-edit-btn" onclick="resetInvForm()" class="hidden text-rose-500 text-xs font-bold uppercase underline">ยกเลิก</button></div>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 id="inv-form-title" class="font-bold text-slate-800 text-base">📦 เพิ่ม/แก้ไขสินค้า</h3>
+                </div>
                 
                 <div class="grid grid-cols-2 gap-3">
                     <div class="flex gap-2 col-span-1">
@@ -190,7 +192,12 @@
                     <label class="col-span-2 bg-slate-100 p-4 rounded-xl text-center font-bold text-xs text-slate-500 cursor-pointer border-2 border-dashed hover:bg-slate-200 transition-colors">📸 ถ่ายรูปสด หรือ เลือกรูปจากเครื่อง <input type="file" id="inv-img-input" accept="image/*" class="hidden" onchange="processImage(this)"></label>
                     
                     <div id="inv-img-wrap" class="col-span-2 flex justify-center hidden"><img id="inv-img-preview" class="w-24 h-24 rounded-xl border p-1 bg-white object-contain"></div>
-                    <input type="hidden" id="edit-id"><button onclick="addItem()" id="save-btn" class="col-span-2 bg-slate-900 text-white py-4 rounded-2xl font-black text-base shadow-xl active:scale-95 transition-transform">บันทึกสินค้า ✅</button>
+                    <input type="hidden" id="edit-id">
+                    
+                    <div class="col-span-2 flex gap-2">
+                        <button onclick="resetInvForm()" id="cancel-edit-btn" class="hidden flex-1 bg-rose-50 text-rose-500 py-4 rounded-2xl font-black text-base shadow-sm active:scale-95 transition-transform border border-rose-100">ยกเลิก</button>
+                        <button onclick="addItem()" id="save-btn" class="flex-[2] bg-slate-900 text-white py-4 rounded-2xl font-black text-base shadow-xl active:scale-95 transition-transform">บันทึกสินค้า ✅</button>
+                    </div>
                 </div>
             </div>
             <div id="inventory-list" class="space-y-3"></div>
@@ -290,15 +297,27 @@
     </div>
 
     <div id="scanner-modal" class="fixed inset-0 bg-black/90 z-[500] hidden flex flex-col items-center justify-center p-4">
-        <h3 class="text-white font-bold mb-4">📷 เล็งบาร์โค้ดให้อยู่ในกรอบ</h3>
+        <h3 class="text-white font-bold mb-4">📷 สแกนสินค้าต่อเนื่องได้เลย!</h3>
         <div id="reader"></div>
-        <button onclick="stopScanner()" class="mt-8 bg-white px-10 py-4 rounded-full font-black text-indigo-600 shadow-2xl active:scale-95">❌ ปิดกล้อง</button>
+        <button onclick="stopScanner()" class="mt-8 bg-white px-10 py-4 rounded-full font-black text-indigo-600 shadow-2xl active:scale-95">❌ ปิดกล้องเพื่อคิดเงิน</button>
     </div>
     
     <datalist id="category-list"></datalist>
 
     <script>
-        // 🟢 --- 1. SETUP DATABASE (INDEXEDDB VIA DEXIE) ---
+        // 🟢 --- Toast Function ---
+        function showToast(msg) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'bg-slate-800 text-white px-6 py-3 rounded-full font-bold shadow-2xl animate-[bounce_0.3s_ease-out] text-sm text-center border-2 border-slate-700';
+            toast.innerText = msg;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
+        }
+
         const vdb = new Dexie("VillagePOSDB");
         vdb.version(1).stores({
             inventory: 'id, barcode, category',
@@ -306,7 +325,6 @@
             settings: 'id' 
         });
 
-        // 🟢 --- 2. HARDWARE FINGERPRINTING ---
         async function getCanvasID() {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -322,7 +340,6 @@
             return "HW-" + hashHex.slice(-8).toUpperCase(); 
         }
 
-        // 🟢 --- 3. LICENSE & STEALTH LOGIC ---
         let currentHWID = "";
         let isFullVersion = false;
         
@@ -340,11 +357,9 @@
         async function initApp() {
             try {
                 if (navigator.storage && navigator.storage.persist) {
-                    const isPersisted = await navigator.storage.persist();
-                    console.log(`Persistent storage granted: ${isPersisted}`);
+                    await navigator.storage.persist();
                 }
                 
-                // 🟢 เริ่มทำงานระบบไฟสถานะทันที
                 updateNetStatusUI();
 
                 currentHWID = await getCanvasID();
@@ -372,7 +387,7 @@
                 showPage('pos'); 
             } catch (e) {
                 console.error("Init Error:", e);
-                alert("เกิดข้อผิดพลาดในการโหลดฐานข้อมูล (คุณอาจใช้โหมดไม่ระบุตัวตน)");
+                alert("เกิดข้อผิดพลาดในการโหลดฐานข้อมูล");
             }
         }
 
@@ -380,9 +395,7 @@
             if (swRegistration) {
                 swRegistration.update().then(() => {
                     alert("✅ ตรวจสอบระบบแล้ว! (หากมีเวอร์ชันใหม่เบราว์เซอร์จะแจ้งเตือนให้โหลดใหม่)");
-                }).catch(err => {
-                    alert("⚠️ การตรวจสอบล้มเหลว กรุณาเช็คอินเทอร์เน็ต");
-                });
+                }).catch(err => alert("⚠️ การตรวจสอบล้มเหลว กรุณาเช็คอินเทอร์เน็ต"));
             } else {
                 alert("⚠️ ระบบยังไม่พร้อมอัปเดต กรุณารีเฟรชหน้าจอ 1 ครั้ง (ตอนมีเน็ต)");
             }
@@ -422,8 +435,6 @@
             }
         }
 
-        // 🟢 --- 4. CRUD & CORE OPERATIONS ---
-
         let cart = []; 
         let isAdmin = localStorage.getItem('vpos_admin') === 'true';
         let currentRange = 'today'; let compressedImageBase64 = "";
@@ -438,8 +449,6 @@
             if (isFullVersion) document.getElementById('set-qr-mode').value = conf.qrMode || 'online';
             if(conf.staticQrImg) { document.getElementById('set-static-qr-preview').src = conf.staticQrImg; document.getElementById('set-static-qr-preview').classList.remove('hidden'); document.getElementById('set-static-qr-label').classList.add('hidden'); }
             if(conf.logo) { document.getElementById('shop-logo-img').src = conf.logo; document.getElementById('shop-logo-img').classList.remove('hidden'); document.getElementById('shop-emoji').classList.add('hidden'); document.getElementById('set-logo-preview').src = conf.logo; document.getElementById('set-logo-preview').classList.remove('hidden'); document.getElementById('set-logo-label').classList.add('hidden'); }
-            
-            // 🟢 V11.2.3 ลบ updateStatusBadge ไปแล้ว เพราะเปลี่ยนไปใช้ updateNetStatusUI() แทน
         }
 
         async function saveSettings() {
@@ -484,7 +493,6 @@
         function logoutAdmin() { isAdmin = false; localStorage.removeItem('vpos_admin'); alert("ออกจากระบบ Admin เรียบร้อย"); location.reload(); } 
         function checkAdminAccess(p) { if(isAdmin) showPage(p); else alert("เข้าสู่ระบบ (Login) ก่อนครับ!"); }
 
-        // --- INVENTORY ---
         async function renderInventory() {
             const list = document.getElementById('inventory-list');
             const inventory = await vdb.inventory.toArray();
@@ -543,11 +551,19 @@
             const i = await vdb.inventory.get(id); 
             document.getElementById('edit-id').value = i.id; document.getElementById('inv-barcode').value = i.barcode; document.getElementById('inv-name').value = i.name; document.getElementById('inv-price').value = i.price; document.getElementById('inv-qty').value = i.qty; document.getElementById('inv-cat').value = i.category; 
             if(i.img) { document.getElementById('inv-img-preview').src = i.img; document.getElementById('inv-img-wrap').classList.remove('hidden'); compressedImageBase64 = i.img; } 
-            document.getElementById('inv-form-title').innerText = '🔥 แก้ไข: ' + i.name; document.getElementById('cancel-edit-btn').classList.remove('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' }); 
+            document.getElementById('inv-form-title').innerText = '🔥 แก้ไข: ' + i.name; 
+            document.getElementById('cancel-edit-btn').classList.remove('hidden'); 
+            window.scrollTo({ top: 0, behavior: 'smooth' }); 
         }
-        function resetInvForm() { document.getElementById('edit-id').value = ''; ['inv-barcode','inv-name','inv-price','inv-qty','inv-cat'].forEach(id => document.getElementById(id).value = ''); document.getElementById('inv-img-wrap').classList.add('hidden'); compressedImageBase64 = ""; document.getElementById('inv-form-title').innerText = '📦 เพิ่มสินค้าใหม่'; document.getElementById('cancel-edit-btn').classList.add('hidden'); }
+        function resetInvForm() { 
+            document.getElementById('edit-id').value = ''; 
+            ['inv-barcode','inv-name','inv-price','inv-qty','inv-cat'].forEach(id => document.getElementById(id).value = ''); 
+            document.getElementById('inv-img-wrap').classList.add('hidden'); 
+            compressedImageBase64 = ""; 
+            document.getElementById('inv-form-title').innerText = '📦 เพิ่มสินค้าใหม่'; 
+            document.getElementById('cancel-edit-btn').classList.add('hidden'); 
+        }
 
-        // --- POS ---
         async function renderPOS(catFilter = 'ทั้งหมด') {
             const search = document.getElementById('search-input').value.toLowerCase(); const grid = document.getElementById('pos-grid'); grid.innerHTML = '';
             const inventory = await vdb.inventory.toArray();
@@ -601,7 +617,6 @@
             cart = []; updateCartUI(); closeCheckout(); await renderPOS(); playSound('finish');
         }
 
-        // --- REPORT ---
         async function renderReport() {
             if(!isFullVersion && currentRange !== 'today') {
                 currentRange = 'today'; 
@@ -654,7 +669,6 @@
             } 
         }
 
-        // --- BACKUP & RESTORE ---
         async function exportData() { 
             const conf = await vdb.settings.get('config');
             const inv = await vdb.inventory.toArray();
@@ -667,7 +681,7 @@
             };
             const blob = new Blob([JSON.stringify(exportObj)], {type:"application/json"}); 
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); 
-            a.download = `VPOS_Backup_${currentHWID}_${new Date().toISOString().split('T')[0]}.json`; a.click(); 
+            a.download = `PosThaiban_Backup_${currentHWID}_${new Date().toISOString().split('T')[0]}.json`; a.click(); 
         }
 
         async function importData(input) { 
@@ -678,7 +692,7 @@
                     const data = JSON.parse(e.target.result); 
                     if(data.settings && data.inventory) { 
                         if(data.metadata && data.metadata.hwid !== currentHWID) {
-                            if(!confirm("⚠️ คุณกำลังนำเข้าข้อมูลจากเครื่องอื่น (HWID ไม่ตรงกัน) ระบบอาจจะขอให้คุณปลดล็อคอีกครั้ง ยืนยันนำเข้าไหม?")) return;
+                            if(!confirm("⚠️ นำเข้าจากเครื่องอื่น (HWID ไม่ตรงกัน) ระบบจะให้ปลดล็อคอีกครั้ง ยืนยันนำเข้าไหม?")) return;
                             data.settings.licenseKey = ""; 
                         }
                         await vdb.transaction('rw', vdb.settings, vdb.inventory, vdb.sales, async () => {
@@ -692,7 +706,6 @@
             }; reader.readAsText(file); 
         }
 
-        // --- FULL RESTORED FUNCTIONS ---
         function showReportTab(tab) {
             document.getElementById('report-log-view').classList.toggle('hidden', tab !== 'log');
             document.getElementById('report-items-view').classList.toggle('hidden', tab !== 'items');
@@ -732,7 +745,7 @@
             } else if(e.key === 'Enter' && barcodeBuffer.length > 2) { 
                 const inventory = await vdb.inventory.toArray();
                 const item = inventory.find(i => i.barcode === barcodeBuffer);
-                if(item) addToCart(item.id); else playSound('warn');
+                if(item) { addToCart(item.id); showToast(`✅ เพิ่ม ${item.name} ลงตะกร้าแล้ว`); } else playSound('warn');
                 barcodeBuffer = '';
             }
         });
@@ -741,7 +754,7 @@
             if(e.key === 'Enter') {
                 const val = e.target.value.trim(); const inventory = await vdb.inventory.toArray();
                 const item = inventory.find(i => i.barcode === val);
-                if(item) { addToCart(item.id); e.target.value = ''; } else if(val) playSound('warn');
+                if(item) { addToCart(item.id); e.target.value = ''; showToast(`✅ เพิ่ม ${item.name} ลงตะกร้าแล้ว`); } else if(val) playSound('warn');
             }
         }
         
@@ -757,12 +770,11 @@
             else if(type === 'finish') { osc.type = 'triangle'; osc.frequency.setValueAtTime(1200, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5); osc.start(); osc.stop(audioCtx.currentTime + 0.5); }
         }
 
-        // Customer Display
         function openCustomerDisplay() {
             customerWindow = window.open('', 'CustomerDisplay', 'width=800,height=600');
             if(!customerWindow) return alert("Pop-up ถูกบล็อค กรุณาอนุญาตให้เบราว์เซอร์เปิด Pop-up");
             let sname = document.getElementById('display-shop-name').innerText;
-            customerWindow.document.write(`<html><head><title>VILLAGE POS - จอแสดงผลลูกค้า</title><script src="https://cdn.tailwindcss.com"><\/script><style>body{font-family:'Kanit',sans-serif;background:#0f172a;color:white;display:flex;flex-direction:column;height:100vh;padding:2rem;}</style></head><body><div class="flex justify-between items-end mb-8 border-b border-slate-700 pb-4"><h1 class="text-4xl font-black italic">รายการสินค้า</h1><h2 class="text-xl text-slate-400 font-bold">${sname}</h2></div><div id="c-cart" class="flex-1 overflow-y-auto text-3xl font-bold space-y-6"></div><div class="flex justify-between items-center mt-8 pt-8 border-t border-slate-700"><p class="text-3xl font-bold text-slate-400 uppercase">ยอดที่ต้องชำระ</p><div class="text-8xl font-black text-emerald-400 italic">฿<span id="c-total">0</span></div></div><div id="c-qr-box" class="fixed inset-0 bg-slate-900/95 hidden flex flex-col items-center justify-center z-50"><h2 class="text-5xl font-black text-white mb-10">สแกนจ่ายเงิน ฿<span id="c-qr-total"></span></h2><div class="bg-white p-6 rounded-[3rem]"><img id="c-qr-img" class="w-96 h-96 object-contain"></div></div></body></html>`);
+            customerWindow.document.write(`<html><head><title>PosThaiban - จอแสดงผลลูกค้า</title><script src="https://cdn.tailwindcss.com"><\/script><style>body{font-family:'Kanit',sans-serif;background:#0f172a;color:white;display:flex;flex-direction:column;height:100vh;padding:2rem;}</style></head><body><div class="flex justify-between items-end mb-8 border-b border-slate-700 pb-4"><h1 class="text-4xl font-black italic">รายการสินค้า</h1><h2 class="text-xl text-slate-400 font-bold">${sname}</h2></div><div id="c-cart" class="flex-1 overflow-y-auto text-3xl font-bold space-y-6"></div><div class="flex justify-between items-center mt-8 pt-8 border-t border-slate-700"><p class="text-3xl font-bold text-slate-400 uppercase">ยอดที่ต้องชำระ</p><div class="text-8xl font-black text-emerald-400 italic">฿<span id="c-total">0</span></div></div><div id="c-qr-box" class="fixed inset-0 bg-slate-900/95 hidden flex flex-col items-center justify-center z-50"><h2 class="text-5xl font-black text-white mb-10">สแกนจ่ายเงิน ฿<span id="c-qr-total"></span></h2><div class="bg-white p-6 rounded-[3rem]"><img id="c-qr-img" class="w-96 h-96 object-contain"></div></div></body></html>`);
             syncCustomerDisplay();
         }
 
@@ -776,7 +788,6 @@
             if(qrSrc) { customerWindow.document.getElementById('c-qr-total').innerText = t.toLocaleString(); customerWindow.document.getElementById('c-qr-img').src = qrSrc; qrBox.classList.remove('hidden'); } else { qrBox.classList.add('hidden'); }
         }
 
-        // Checkout & UI Tools
         function openCheckout() { if(!cart.length) return; document.getElementById('final-total').innerText = document.getElementById('cart-total').innerText; document.getElementById('modal-checkout').classList.remove('hidden'); syncCustomerDisplay(); }
         function closeCheckout() { document.getElementById('modal-checkout').classList.add('hidden'); syncCustomerDisplay(); }
         
@@ -784,12 +795,12 @@
         async function uploadStaticQR(input) { const f = input.files[0]; if(f){ const r = new FileReader(); r.onload = e => { const img = new Image(); img.onload = async () => { const cvs = document.createElement('canvas'); let w = img.width; let h = img.height; const max = 600; if(w > max || h > max) { if(w > h) { h = Math.round((h * max) / w); w = max; } else { w = Math.round((w * max) / h); h = max; } } cvs.width = w; cvs.height = h; cvs.getContext('2d').drawImage(img, 0, 0, w, h); let conf = await vdb.settings.get('config'); conf.staticQrImg = cvs.toDataURL('image/jpeg', 0.8); await vdb.settings.put(conf); document.getElementById('set-static-qr-preview').src = conf.staticQrImg; document.getElementById('set-static-qr-preview').classList.remove('hidden'); document.getElementById('set-static-qr-label').classList.add('hidden'); }; img.src = e.target.result; }; r.readAsDataURL(f); } }
         async function uploadLogo(input) { const f = input.files[0]; if(f){ const r = new FileReader(); r.onload = e => { const img = new Image(); img.onload = async () => { const cvs = document.createElement('canvas'); let w = img.width; let h = img.height; const max = 150; if(w > max || h > max) { if(w > h) { h = Math.round((h * max) / w); w = max; } else { w = Math.round((w * max) / h); h = max; } } cvs.width = w; cvs.height = h; cvs.getContext('2d').drawImage(img, 0, 0, w, h); let conf = await vdb.settings.get('config'); conf.logo = cvs.toDataURL('image/jpeg', 0.7); await vdb.settings.put(conf); applySettingsToUI(conf); }; img.src = e.target.result; }; r.readAsDataURL(f); } }
         
-        // 🟢 --- อัปเกรด Scanner (Camera) ให้สแกนไวและติดชัวร์ ---
+        // 🟢 --- อัปเกรด Scanner ให้สแกนแช่ได้ (Continuous Mode) ---
+        let isScanningProcess = false;
         function startScanner(t) { 
             const modal = document.getElementById('scanner-modal');
             modal.classList.remove('hidden'); 
             
-            // รอให้กรอบกล้องโชว์เสร็จก่อน ค่อยเรียกกล้อง (แก้บั๊กจอดำ)
             setTimeout(async () => {
                 try {
                     if (html5QrScanner) {
@@ -799,25 +810,31 @@
 
                     html5QrScanner = new Html5Qrcode("reader");
                     await html5QrScanner.start(
-                        { facingMode: "environment" }, // บังคับกล้องหลัง
+                        { facingMode: "environment" }, 
                         { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
                         async (txt) => { 
+                            if(isScanningProcess) return; // 🟢 ป้องกันการสแกนรัวเกินไป
+                            isScanningProcess = true;
+                            
                             if(t === 'pos') { 
                                 const inventory = await vdb.inventory.toArray(); 
                                 const i = inventory.find(inv => inv.barcode === txt); 
                                 if(i) { 
                                     addToCart(i.id); 
-                                    playSound('success'); 
+                                    showToast(`✅ เพิ่ม ${i.name} ลงตะกร้าแล้ว!`); // โชว์ Popup
                                 } else {
                                     playSound('warn');
-                                    alert("❌ ไม่พบสินค้าบาร์โค้ด: " + txt);
+                                    showToast(`❌ ไม่พบสินค้าบาร์โค้ด: ${txt}`);
                                 }
+                                await renderPOS(); 
+                                // 🟢 หน่วงเวลา 1.5 วิ ค่อยเปิดรับสแกนชิ้นต่อไป (กล้องไม่ปิด)
+                                setTimeout(() => { isScanningProcess = false; }, 1500);
                             } else { 
                                 document.getElementById('inv-barcode').value = txt; 
                                 playSound('success');
+                                stopScanner(); // ถ้าอยู่หน้าสต็อก ให้ปิดกล้องไปเลย
+                                isScanningProcess = false;
                             } 
-                            stopScanner(); 
-                            await renderPOS(); 
                         }
                     );
                 } catch (err) {
@@ -841,7 +858,6 @@
             }
         }
 
-        // เริ่มต้นโปรแกรม
         window.onload = () => { initApp(); };
     </script>
 
@@ -854,7 +870,6 @@
             if (e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) return false;
             if (e.ctrlKey && e.keyCode == 'S'.charCodeAt(0)) return false;
         };
-        // กับดัก Debugger 
         setInterval(() => {
             const _0x1 = new Date().getTime();
             debugger; 
