@@ -131,12 +131,18 @@
                 <div class="flex justify-between items-center mb-4"><h3 id="inv-form-title" class="font-bold text-slate-800 text-base">📦 เพิ่ม/แก้ไขสินค้า</h3><button id="cancel-edit-btn" onclick="resetInvForm()" class="hidden text-rose-500 text-xs font-bold uppercase underline">ยกเลิก</button></div>
                 
                 <div class="grid grid-cols-2 gap-3">
-                    <input id="inv-barcode" placeholder="บาร์โค้ด" class="p-3 bg-slate-50 border rounded-xl text-sm font-bold outline-none focus:border-indigo-400">
+                    <div class="flex gap-2 col-span-1">
+                        <input id="inv-barcode" placeholder="บาร์โค้ด" class="w-full p-3 bg-slate-50 border rounded-xl text-sm font-bold outline-none focus:border-indigo-400">
+                        <button onclick="startScanner('inventory')" class="bg-indigo-600 text-white w-12 rounded-xl flex items-center justify-center shadow-md active:scale-95 shrink-0">📷</button>
+                    </div>
+                    
                     <input id="inv-name" placeholder="ชื่อสินค้า" class="p-3 bg-slate-50 border rounded-xl text-sm font-bold outline-none focus:border-indigo-400">
                     <input id="inv-price" type="number" placeholder="ราคา" class="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-lg font-black text-indigo-600 text-center outline-none">
                     <input id="inv-qty" type="number" placeholder="สต็อก" class="p-3 bg-slate-50 border rounded-xl text-lg font-bold text-center outline-none">
                     <input id="inv-cat" placeholder="หมวดหมู่" class="col-span-2 p-3 bg-slate-50 border rounded-xl text-sm outline-none" list="category-list">
-                    <label class="col-span-2 bg-slate-100 p-3 rounded-xl text-center font-bold text-xs text-slate-400 cursor-pointer border-2 border-dashed">📸 รูปสินค้า <input type="file" id="inv-img-input" accept="image/*" class="hidden" onchange="processImage(this)"></label>
+                    
+                    <label class="col-span-2 bg-slate-100 p-3 rounded-xl text-center font-bold text-xs text-slate-400 cursor-pointer border-2 border-dashed">📸 ถ่ายรูป/เลือกรูปสินค้า <input type="file" id="inv-img-input" accept="image/*" capture="environment" class="hidden" onchange="processImage(this)"></label>
+                    
                     <div id="inv-img-wrap" class="col-span-2 flex justify-center hidden"><img id="inv-img-preview" class="w-24 h-24 rounded-xl border p-1 bg-white object-contain"></div>
                     <input type="hidden" id="edit-id"><button onclick="addItem()" id="save-btn" class="col-span-2 bg-slate-900 text-white py-4 rounded-2xl font-black text-base shadow-xl active:scale-95 transition-transform">บันทึกสินค้า ✅</button>
                 </div>
@@ -693,7 +699,7 @@
             else if(type === 'finish') { osc.type = 'triangle'; osc.frequency.setValueAtTime(1200, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5); osc.start(); osc.stop(audioCtx.currentTime + 0.5); }
         }
 
-        // Voice API (แก้บั๊กเปิดเสียงให้แล้ว รุ่นทดลองก็ใช้ได้)
+        // 🟢 แก้ไข: Voice API เปลี่ยน interimResults = false ให้รอพูดจบก่อน
         function toggleVoice() {
             if(!('webkitSpeechRecognition' in window)) return alert("เบราว์เซอร์นี้ไม่รองรับระบบสั่งด้วยเสียงครับ");
             
@@ -702,7 +708,10 @@
             if(audioCtx.state === 'suspended') audioCtx.resume();
 
             if(!recognition) {
-                recognition = new webkitSpeechRecognition(); recognition.lang = 'th-TH'; recognition.interimResults = true; recognition.continuous = true;
+                recognition = new webkitSpeechRecognition(); recognition.lang = 'th-TH'; 
+                recognition.interimResults = false; // 🟢 รอให้พูดจบประโยค ค่อยเพิ่มลงตะกร้า จะได้ไม่รวน
+                recognition.continuous = true;
+                
                 recognition.onresult = async (event) => {
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
                         if (event.results[i].isFinal) {
