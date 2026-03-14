@@ -2,31 +2,53 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  // 🟢 อัปเกรดระบบ Service Worker ให้รองรับการ Sync และแจ้งเตือนอัปเดต
+  // 🟢 V11.2.3: อัปเกรด Service Worker ให้บังคับลบของเก่าแล้วรีเฟรชหน้าใหม่ทันที
   let swRegistration = null;
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js').then(reg => {
         swRegistration = reg;
-        console.log('SW Registered!', reg);
+        console.log('SW Registered V11.2.3!', reg);
         
         reg.onupdatefound = () => {
           const installingWorker = reg.installing;
           installingWorker.onstatechange = () => {
             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              if(confirm('🎉 พบระบบเวอร์ชันใหม่! ต้องการอัปเดตหน้าจอเดี๋ยวนี้หรือไม่? (ข้อมูลสินค้าไม่หาย)')) {
-                window.location.reload();
+              if(confirm('🎉 พบระบบ V11.2.3 ใหม่! (บังคับรีเฟรชเพื่อเคลียร์แคช) ข้อมูลสินค้าไม่หาย')) {
+                // 🟢 สั่งให้ SW ตัวใหม่ยึดอำนาจทันที แล้วรีเฟรชหน้า
+                installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                window.location.reload(true); 
               }
             }
           };
         };
       }).catch(err => console.error('SW Error:', err));
     });
+    
+    // ดักเมื่อ SW ตัวใหม่เข้าควบคุมสำเร็จ ให้รีเฟรชหน้าเพื่อให้โค้ดใหม่ทำงาน
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
   }
 
-  // 🟢 ระบบดักจับสถานะเน็ตแบบ Real-time (ฟังก์ชันเสริม)
-  window.addEventListener('online', () => document.getElementById('network-status').style.display = 'none');
-  window.addEventListener('offline', () => document.getElementById('network-status').style.display = 'flex');
+  // 🟢 V11.2.3: ระบบดักจับสถานะเน็ตแบบจุดไข่ปลา (ลบแถบส้มออก)
+  const updateNetStatusUI = () => {
+      const dot = document.getElementById('net-dot');
+      const txt = document.getElementById('net-txt');
+      if(dot && txt) {
+          if (navigator.onLine) {
+              dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+              txt.innerText = 'Online';
+              txt.className = 'text-[9px] font-bold text-emerald-500 uppercase';
+          } else {
+              dot.className = 'w-2 h-2 rounded-full bg-rose-500';
+              txt.innerText = 'Offline';
+              txt.className = 'text-[9px] font-bold text-rose-500 uppercase';
+          }
+      }
+  };
+  window.addEventListener('online', updateNetStatusUI);
+  window.addEventListener('offline', updateNetStatusUI);
 </script>
 <head>
     <meta charset="UTF-8">
@@ -36,7 +58,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0f172a">
     
-    <title>VILLAGE POS V11.2.2</title>
+    <title>VILLAGE POS V11.2.3</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -59,20 +81,14 @@
         header { padding-top: calc(0.75rem + env(safe-area-inset-top)); }
         .keyboard-active #cart-bar { display: none !important; }
         body:not(.pos-active) #cart-bar { display: none !important; }
-        #status-badge { transition: all 0.3s ease; }
         .trial-locked { opacity: 0.5; pointer-events: none; filter: grayscale(100%); }
         
-        /* 🟢 แก้กล้องดำ: บังคับขนาดและรูปแบบของกล้องสแกนบาร์โค้ด */
         #reader { width: 100% !important; max-width: 400px; margin: auto; background: black; border-radius: 1.5rem; overflow: hidden; border: 4px solid white; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
         #reader video { border-radius: 1.25rem; object-fit: cover; }
         #reader__dashboard_section_csr span { color: white !important; }
     </style>
 </head>
 <body class="flex flex-col h-screen overflow-hidden text-slate-800 pos-active">
-
-    <div id="network-status" class="fixed top-0 left-0 right-0 bg-orange-500 text-white text-[10px] font-bold text-center py-1 z-[9999] hidden justify-center items-center gap-1">
-        ⚠️ <span>คุณกำลังใช้งานโหมด Offline (ข้อมูลทั้งหมดถูกบันทึกลงเครื่องแล้ว)</span>
-    </div>
 
     <div id="license-lock" class="fixed inset-0 bg-slate-900/95 z-[9999] flex flex-col items-center justify-center p-6 text-white hidden backdrop-blur-md overflow-y-auto">
         <div class="w-full max-w-sm bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl my-auto">
@@ -118,9 +134,12 @@
             <div>
                 <div class="flex items-center gap-2">
                     <h1 id="display-shop-name" class="font-bold text-lg leading-none italic">ร้านค้าชุมชน</h1>
-                    <span id="status-badge" class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-emerald-500 text-white shadow-sm">Online</span>
+                    <div class="flex items-center gap-1.5 ml-1 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
+                        <div id="net-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <span id="net-txt" class="text-[9px] font-bold text-emerald-500 uppercase">Online</span>
+                    </div>
                 </div>
-                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.2.2 PRO (ULTRA OFFLINE)</p>
+                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.2.3 PRO (STABLE OFFLINE)</p>
             </div>
         </div>
         <div class="flex gap-2">
@@ -168,7 +187,7 @@
                     <input id="inv-qty" type="number" placeholder="สต็อก" class="p-3 bg-slate-50 border rounded-xl text-lg font-bold text-center outline-none">
                     <input id="inv-cat" placeholder="หมวดหมู่" class="col-span-2 p-3 bg-slate-50 border rounded-xl text-sm outline-none" list="category-list">
                     
-                    <label class="col-span-2 bg-slate-100 p-3 rounded-xl text-center font-bold text-xs text-slate-400 cursor-pointer border-2 border-dashed">📸 ถ่ายรูป/เลือกรูปสินค้า <input type="file" id="inv-img-input" accept="image/*" capture="environment" class="hidden" onchange="processImage(this)"></label>
+                    <label class="col-span-2 bg-slate-100 p-4 rounded-xl text-center font-bold text-xs text-slate-500 cursor-pointer border-2 border-dashed hover:bg-slate-200 transition-colors">📸 ถ่ายรูปสด หรือ เลือกรูปจากเครื่อง <input type="file" id="inv-img-input" accept="image/*" class="hidden" onchange="processImage(this)"></label>
                     
                     <div id="inv-img-wrap" class="col-span-2 flex justify-center hidden"><img id="inv-img-preview" class="w-24 h-24 rounded-xl border p-1 bg-white object-contain"></div>
                     <input type="hidden" id="edit-id"><button onclick="addItem()" id="save-btn" class="col-span-2 bg-slate-900 text-white py-4 rounded-2xl font-black text-base shadow-xl active:scale-95 transition-transform">บันทึกสินค้า ✅</button>
@@ -320,11 +339,13 @@
 
         async function initApp() {
             try {
-                // บังคับขอสิทธิ์เก็บข้อมูลถาวร
                 if (navigator.storage && navigator.storage.persist) {
                     const isPersisted = await navigator.storage.persist();
                     console.log(`Persistent storage granted: ${isPersisted}`);
                 }
+                
+                // 🟢 เริ่มทำงานระบบไฟสถานะทันที
+                updateNetStatusUI();
 
                 currentHWID = await getCanvasID();
                 document.getElementById('display-hw-id').value = currentHWID;
@@ -417,13 +438,8 @@
             if (isFullVersion) document.getElementById('set-qr-mode').value = conf.qrMode || 'online';
             if(conf.staticQrImg) { document.getElementById('set-static-qr-preview').src = conf.staticQrImg; document.getElementById('set-static-qr-preview').classList.remove('hidden'); document.getElementById('set-static-qr-label').classList.add('hidden'); }
             if(conf.logo) { document.getElementById('shop-logo-img').src = conf.logo; document.getElementById('shop-logo-img').classList.remove('hidden'); document.getElementById('shop-emoji').classList.add('hidden'); document.getElementById('set-logo-preview').src = conf.logo; document.getElementById('set-logo-preview').classList.remove('hidden'); document.getElementById('set-logo-label').classList.add('hidden'); }
-            updateStatusBadge(isFullVersion ? conf.qrMode : 'offline');
-        }
-
-        function updateStatusBadge(mode) {
-            const badge = document.getElementById('status-badge');
-            badge.innerText = mode === 'online' ? 'Online' : 'Offline';
-            badge.className = mode === 'online' ? 'px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-emerald-500 text-white shadow-sm' : 'px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-orange-500 text-white shadow-sm';
+            
+            // 🟢 V11.2.3 ลบ updateStatusBadge ไปแล้ว เพราะเปลี่ยนไปใช้ updateNetStatusUI() แทน
         }
 
         async function saveSettings() {
