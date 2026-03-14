@@ -1,7 +1,7 @@
 {
-  "name": "VILLAGE POS V11 PRO",
-  "short_name": "VILLAGE POS",
-  "description": "ระบบจัดการหน้าร้านออฟไลน์แบบ 100%",
+  "name": "Village POS V11 PRO",
+  "short_name": "VPOS PRO",
+  "description": "ระบบจัดการร้านค้าชุมชนออฟไลน์",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -9,13 +9,7 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icon-512.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/2432/2432818.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
