@@ -285,6 +285,7 @@
                 <label id="btn-import-data" class="block w-full bg-slate-50 text-slate-600 py-4 rounded-xl font-bold text-xs border border-slate-200 text-center cursor-pointer uppercase active:scale-95 transition-transform">📤 คืนค่า (Import) <input type="file" id="input-import-data" accept=".json" class="hidden" onchange="importData(this)"></label>
                 
                 <button onclick="logoutAdmin()" class="mt-4 text-[10px] text-rose-400 font-bold underline">ออกจากระบบ Admin</button>
+                <button id="btn-relock-license" onclick="lockSystem()" class="hidden text-[10px] text-amber-500 font-bold underline">🔒 ล็อคกลับเป็นโหมดทดลอง (Trial)</button>
             </div>
         </div>
     </main>
@@ -383,16 +384,76 @@
 
         let currentHWID = "";
         let isFullVersion = false;
-        
-        const _0xptr_a = "VLGPRO_"; const _0xptr_b = "SECRET_"; const _0xptr_c = "2026";
-        const _getSysK = () => _0xptr_a + _0xptr_b + _0xptr_c;
 
-        async function generateUnlockKey(hwid) {
-            const msgBuffer = new TextEncoder().encode(hwid + _getSysK());
+        // Hardening: ซ่อนส่วนประกอบของ secret และตรวจโครงสร้าง key + checksum ก่อนยืนยัน
+        const _kA = [86,76,71,80,82,79].map(c => String.fromCharCode(c)).join(''); // VLGPRO
+        const _kB = ['#','T','H','B','_','2','0','2','6'].join('');
+        const _kC = navigator.language + '|' + location.hostname + '|PosThaiban';
+        const _mixSecret = () => `${_kA}|${_kB}|${_kC}`;
+
+        async function _sha256Hex(msg) {
+            const msgBuffer = new TextEncoder().encode(msg);
             const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
             const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return hashHex.slice(0, 8).toUpperCase(); 
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function _licenseChecksum(raw12) {
+            let sum = 0;
+            for (let i = 0; i < raw12.length; i++) {
+                sum += raw12.charCodeAt(i) * (i + 11);
+            }
+            return String(sum % 97).padStart(2, '0');
+        }
+
+        function normalizeLicenseInput(input) {
+            return (input || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        }
+
+        function formatLicenseKey(raw14) {
+            return `PTB-${raw14.slice(0,4)}-${raw14.slice(4,8)}-${raw14.slice(8,12)}-${raw14.slice(12,14)}`;
+        }
+
+        async function generateUnlockKey(hwid) {
+            const h1 = await _sha256Hex(`${hwid}|${_mixSecret()}`);
+            const h2 = await _sha256Hex(`${h1.slice(9, 25)}|${hwid.split('').reverse().join('')}`);
+            const raw12 = (h1.slice(4, 8) + h2.slice(13, 17) + h1.slice(23, 27)).toUpperCase();
+            const checksum = _licenseChecksum(raw12);
+            return formatLicenseKey(raw12 + checksum);
+        }
+
+        async function hasValidProLicense() {
+            const conf = await vdb.settings.get('config');
+            if (!conf || !conf.licenseKey || !currentHWID) return false;
+
+            const normalized = normalizeLicenseInput(conf.licenseKey);
+            if (normalized.length !== 17 || !normalized.startsWith('PTB')) return false;
+
+            const payload = normalized.slice(3, 15);
+            const checksum = normalized.slice(15, 17);
+            if (_licenseChecksum(payload) !== checksum) return false;
+
+            const expectedKey = await generateUnlockKey(currentHWID);
+            return normalized === normalizeLicenseInput(expectedKey);
+        }
+
+        async function refreshLicenseState() {
+            isFullVersion = await hasValidProLicense();
+            if (isFullVersion) {
+                liftTrialLimits();
+                document.getElementById('btn-relock-license').classList.remove('hidden');
+            } else {
+                enforceTrialLimits();
+                document.getElementById('btn-relock-license').classList.add('hidden');
+            }
+            return isFullVersion;
+        }
+
+        async function ensureProAccess(showLock = true) {
+            const ok = await hasValidProLicense();
+            isFullVersion = ok;
+            if (!ok && showLock) showLockScreen();
+            return ok;
         }
 
         async function initApp() {
@@ -413,14 +474,7 @@
                     await vdb.settings.put(conf);
                 }
 
-                const expectedKey = await generateUnlockKey(currentHWID);
-                if (conf.licenseKey === expectedKey) {
-                    isFullVersion = true;
-                    document.getElementById('btn-show-lock').classList.add('hidden');
-                } else {
-                    isFullVersion = false;
-                    enforceTrialLimits();
-                }
+                await refreshLicenseState();
 
                 applySettingsToUI(conf);
                 
@@ -456,25 +510,60 @@
             currentRange = 'today';
         }
 
+        function liftTrialLimits() {
+            document.getElementById('btn-show-lock').classList.add('hidden');
+            document.getElementById('btn-import-data').classList.remove('trial-locked');
+            document.getElementById('input-import-data').disabled = false;
+            document.getElementById('set-pp').readOnly = false;
+            document.getElementById('set-pp').classList.remove('bg-slate-200');
+            document.getElementById('set-qr-mode').disabled = false;
+            document.getElementById('btn-range-week').classList.remove('trial-locked');
+            document.getElementById('btn-range-month').classList.remove('trial-locked');
+            document.getElementById('report-date-select').disabled = false;
+        }
+
         function showLockScreen() { document.getElementById('license-lock').classList.remove('hidden'); }
         function closeLockScreen() { document.getElementById('license-lock').classList.add('hidden'); }
         function copyHWID() { const copyText = document.getElementById('display-hw-id'); copyText.select(); document.execCommand("copy"); showToast("คัดลอกรหัสเครื่องแล้ว ส่งให้แอดมินได้เลย"); }
 
         async function unlockSystem() {
-            const inputKey = document.getElementById('lic-key').value.trim().toUpperCase();
-            if(!inputKey) return vNotify("กรุณากรอก LICENSE KEY", "แจ้งเตือน", "⚠️");
-            
+            const normalizedInput = normalizeLicenseInput(document.getElementById('lic-key').value);
+            if(!normalizedInput) return vNotify("กรุณากรอก LICENSE KEY", "แจ้งเตือน", "⚠️");
+
             const expectedKey = await generateUnlockKey(currentHWID);
-            if(inputKey === expectedKey) {
+            const expectedNormalized = normalizeLicenseInput(expectedKey);
+
+            if(normalizedInput === expectedNormalized) {
                 let conf = await vdb.settings.get('config');
                 conf.licenseKey = expectedKey;
                 await vdb.settings.put(conf);
+
+                await refreshLicenseState();
+                document.getElementById('lic-key').value = '';
+                closeLockScreen();
                 await vNotify("ปลดล็อค V11 PRO สำเร็จ! ขอบคุณที่สนับสนุน", "สำเร็จ", "🎉");
-                location.reload(); 
             } else {
-                playSound('warn'); 
+                playSound('warn');
                 vNotify("LICENSE KEY ไม่ถูกต้อง!", "ผิดพลาด", "❌");
             }
+        }
+
+        async function lockSystem() {
+            if(!isAdmin) return vNotify('เฉพาะ Admin เท่านั้นที่ล็อคระบบได้', 'แจ้งเตือน', '🔐');
+            if(!(await ensureProAccess(false))) return vNotify('ระบบอยู่ในโหมดทดลองอยู่แล้ว', 'แจ้งเตือน', 'ℹ️');
+
+            const ok = await vConfirm('ยืนยันล็อคกลับเป็นโหมดทดลอง? ฟีเจอร์ PRO จะถูกปิดทันที', 'ยืนยันการล็อค', '⚠️');
+            if(!ok) return;
+
+            let conf = await vdb.settings.get('config');
+            conf.licenseKey = '';
+            conf.qrMode = 'offline';
+            await vdb.settings.put(conf);
+
+            isFullVersion = false;
+            await refreshLicenseState();
+            await vNotify('ล็อคระบบกลับโหมดทดลองเรียบร้อยแล้ว', 'สำเร็จ', '🔒');
+            showPage('pos');
         }
 
         let cart = []; 
@@ -498,7 +587,8 @@
             conf.shopName = document.getElementById('set-shop-name').value;
             conf.bankName = document.getElementById('set-bank').value;
             
-            if(isFullVersion) {
+            const proEnabled = await ensureProAccess(false);
+            if(proEnabled) {
                 conf.promptpay = document.getElementById('set-pp').value;
                 conf.qrMode = document.getElementById('set-qr-mode').value;
             } else {
@@ -522,7 +612,11 @@
         }
 
         async function toggleAdmin() { 
-            if(isAdmin) { vNotify("คุณอยู่ในระบบ Admin แล้ว", "แจ้งเตือน", "🛡️"); } else {
+            if(isAdmin) { 
+                if(await vConfirm('ต้องการล็อคระบบ Admin ตอนนี้หรือไม่?', 'ล็อคระบบ', '🔒')) {
+                    await logoutAdmin();
+                }
+            } else {
                 let conf = await vdb.settings.get('config');
                 const p = prompt("รหัส Admin:"); 
                 if(p === conf.password) { 
@@ -560,7 +654,7 @@
             const n = document.getElementById('inv-name').value; const p = parseFloat(document.getElementById('inv-price').value); 
             if(!n || isNaN(p)) return; 
             
-            if(!isFullVersion && !document.getElementById('edit-id').value) {
+            if(!(await ensureProAccess(false)) && !document.getElementById('edit-id').value) {
                 const count = await vdb.inventory.count();
                 if(count >= 5) {
                     showLockScreen(); 
@@ -664,7 +758,7 @@
         }
 
         async function renderReport() {
-            if(!isFullVersion && currentRange !== 'today') {
+            if(!(await ensureProAccess(false)) && currentRange !== 'today') {
                 currentRange = 'today'; 
                 document.getElementById('report-date-select').value = '';
             }
@@ -696,13 +790,13 @@
             if(isAdmin) document.getElementById('btn-clear-sales').classList.remove('hidden');
         }
 
-        function setReportRange(range) {
-            if(!isFullVersion && range !== 'today') {
-                showLockScreen(); 
+        async function setReportRange(range) {
+            if(!(await ensureProAccess(false)) && range !== 'today') {
+                showLockScreen();
                 return;
             }
             currentRange = range;
-            if (range !== 'custom') { document.getElementById('report-date-select').value = ''; } 
+            if (range !== 'custom') { document.getElementById('report-date-select').value = ''; }
             else if (!document.getElementById('report-date-select').value) { currentRange = 'today'; }
             renderReport();
         }
@@ -732,7 +826,7 @@
         }
 
         async function importData(input) { 
-            if(!isFullVersion) { showLockScreen(); return; }
+            if(!(await ensureProAccess(false))) { showLockScreen(); return; }
             const file = input.files[0]; if(!file) return; const reader = new FileReader(); 
             reader.onload = async e => { 
                 try { 
@@ -769,7 +863,8 @@
             document.getElementById('qr-area').classList.remove('hidden'); document.getElementById('qr-paid-btn').classList.remove('hidden'); document.getElementById('bank-info-display').innerText = conf.bankName;
 
             let finalSrc = "";
-            let mode = isFullVersion ? (conf.qrMode || 'online') : 'offline'; 
+            const proEnabled = await ensureProAccess(false);
+            let mode = proEnabled ? (conf.qrMode || 'online') : 'offline';
 
             if(mode === 'online') {
                 let pp = conf.promptpay;
