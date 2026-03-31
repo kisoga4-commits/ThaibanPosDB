@@ -326,7 +326,10 @@
                 <div class="bg-white p-3 rounded-2xl border text-center shadow-sm">
                     <p class="text-[8px] text-slate-400 font-bold uppercase">จำนวนบิล: <span id="report-count" class="text-slate-800 font-black text-sm ml-1">0</span></p>
                 </div>
-                <input type="date" id="report-date-select" onchange="setReportRange('custom')" class="p-2 bg-white border rounded-2xl text-[10px] font-bold text-indigo-600 text-center outline-none">
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="date" id="report-date-from" onchange="setReportRange('custom')" class="p-2 bg-white border rounded-2xl text-[10px] font-bold text-indigo-600 text-center outline-none">
+                    <input type="date" id="report-date-to" onchange="setReportRange('custom')" class="p-2 bg-white border rounded-2xl text-[10px] font-bold text-indigo-600 text-center outline-none">
+                </div>
             </div>
             <div class="flex bg-slate-200 p-1 rounded-xl gap-2">
                 <button onclick="showReportTab('log')" id="tab-rep-log" class="flex-1 py-2.5 rounded-lg font-black text-xs bg-white text-indigo-600 shadow-md">📋 รายการบิล</button>
@@ -722,7 +725,8 @@
             document.getElementById('set-qr-mode').disabled = true;
             document.getElementById('btn-range-week').classList.add('trial-locked');
             document.getElementById('btn-range-month').classList.add('trial-locked');
-            document.getElementById('report-date-select').disabled = true;
+            document.getElementById('report-date-from').disabled = true;
+            document.getElementById('report-date-to').disabled = true;
             currentRange = 'today';
         }
 
@@ -733,7 +737,8 @@
             document.getElementById('set-qr-mode').disabled = false;
             document.getElementById('btn-range-week').classList.remove('trial-locked');
             document.getElementById('btn-range-month').classList.remove('trial-locked');
-            document.getElementById('report-date-select').disabled = false;
+            document.getElementById('report-date-from').disabled = false;
+            document.getElementById('report-date-to').disabled = false;
         }
 
         function showLockScreen() { document.getElementById('license-lock').classList.remove('hidden'); }
@@ -1029,11 +1034,17 @@
         async function renderReport() {
             if(!(await ensureProAccess(false)) && currentRange !== 'today') {
                 currentRange = 'today';
-                document.getElementById('report-date-select').value = '';
+                document.getElementById('report-date-from').value = '';
+                document.getElementById('report-date-to').value = '';
             }
 
-            const selectDate = document.getElementById('report-date-select').value;
-            const now = new Date(); const targetDay = selectDate ? new Date(selectDate).toDateString() : now.toDateString();
+            const dateFromInput = document.getElementById('report-date-from').value;
+            const dateToInput = document.getElementById('report-date-to').value;
+            const now = new Date();
+            const rangeStart = dateFromInput ? new Date(dateFromInput) : null;
+            const rangeEnd = dateToInput ? new Date(dateToInput) : null;
+            if (rangeStart) rangeStart.setHours(0, 0, 0, 0);
+            if (rangeEnd) rangeEnd.setHours(23, 59, 59, 999);
 
             let sum = 0; let count = 0; let hitStats = {};
             const logView = document.getElementById('report-log-view'); logView.innerHTML = '';
@@ -1048,7 +1059,10 @@
                 if(currentRange === 'today') return sDate.toDateString() === now.toDateString();
                 if(currentRange === 'week') return (now - sDate)/(1000*60*60*24) < 7;
                 if(currentRange === 'month') return (now - sDate)/(1000*60*60*24) < 30;
-                if(currentRange === 'custom') return sDate.toDateString() === targetDay;
+                if(currentRange === 'custom') {
+                    if(!rangeStart || !rangeEnd) return false;
+                    return sDate >= rangeStart && sDate <= rangeEnd;
+                }
                 return true;
             }).reverse().forEach(s => {
                 const paymentDisplay = getPaymentMethodDisplay(s.method);
@@ -1072,8 +1086,22 @@
                 return;
             }
             currentRange = range;
-            if (range !== 'custom') { document.getElementById('report-date-select').value = ''; }
-            else if (!document.getElementById('report-date-select').value) { currentRange = 'today'; }
+            if (range !== 'custom') {
+                document.getElementById('report-date-from').value = '';
+                document.getElementById('report-date-to').value = '';
+            } else if (!document.getElementById('report-date-from').value || !document.getElementById('report-date-to').value) {
+                currentRange = 'today';
+            } else {
+                const fromDate = new Date(document.getElementById('report-date-from').value);
+                const toDate = new Date(document.getElementById('report-date-to').value);
+                if (fromDate > toDate) {
+                    const fromInput = document.getElementById('report-date-from');
+                    const toInput = document.getElementById('report-date-to');
+                    const swapVal = fromInput.value;
+                    fromInput.value = toInput.value;
+                    toInput.value = swapVal;
+                }
+            }
             renderReport();
         }
 
