@@ -3,7 +3,7 @@
  * ใช้การอัปเดตแบบเงียบ ไม่มี popup/force reload
  */
 
-const CACHE_NAME = 'posthaiban-shell-v11-2-5';
+const CACHE_NAME = 'posthaiban-shell-v11-2-6';
 const APP_SHELL = [
   './',
   './index.html',
