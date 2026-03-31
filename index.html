@@ -2,7 +2,7 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  const APP_VERSION = '11.2.9';
+  const APP_VERSION = '11.3.0';
 
   const storedAppVersion = localStorage.getItem('vpos-app-version');
   if (storedAppVersion !== APP_VERSION) {
@@ -124,7 +124,7 @@
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="./icon-192.png">
 
-    <title>PosThaiban V11.2.9</title>
+    <title>PosThaiban V11.3.0</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -207,7 +207,7 @@
                 <div class="flex items-center gap-3"><span class="text-emerald-400 text-lg">✅</span> เพิ่มสินค้าได้ไม่จำกัด (ปกติ 5 ชิ้น)</div>
                 <div class="flex items-center gap-3"><span class="text-emerald-400 text-lg">✅</span> ดูยอดขายย้อนหลัง สัปดาห์/เดือน ได้</div>
                 <div class="flex items-center gap-3"><span class="text-emerald-400 text-lg">✅</span> ผูกพร้อมเพย์ สร้าง QR ออนไลน์อัตโนมัติ</div>
-                <div class="flex items-center gap-3"><span class="text-emerald-400 text-lg">✅</span> นำเข้าข้อมูล (Restore) ย้ายเครื่องได้</div>
+                <div class="flex items-center gap-3"><span class="text-emerald-400 text-lg">✅</span> นำเข้าข้อมูล (Restore) ใช้งานได้ทุกโหมด</div>
             </div>
 
             <div class="bg-slate-900 p-4 rounded-xl border border-slate-700 mb-6">
@@ -242,7 +242,7 @@
                         <span id="net-txt" class="text-[9px] font-bold text-emerald-500 uppercase">Online</span>
                     </div>
                 </div>
-                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.2.5 PRO (STABLE OFFLINE)</p>
+                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.3.0 PRO (STABLE OFFLINE)</p>
             </div>
         </div>
         <div class="flex gap-2">
@@ -712,8 +712,6 @@
 
         function enforceTrialLimits() {
             document.getElementById('btn-show-lock').classList.remove('hidden');
-            document.getElementById('btn-import-data').classList.add('trial-locked');
-            document.getElementById('input-import-data').disabled = true;
             document.getElementById('set-pp').readOnly = true;
             document.getElementById('set-pp').classList.add('bg-slate-200');
             document.getElementById('set-qr-mode').value = 'offline';
@@ -726,8 +724,6 @@
 
         function liftTrialLimits() {
             document.getElementById('btn-show-lock').classList.add('hidden');
-            document.getElementById('btn-import-data').classList.remove('trial-locked');
-            document.getElementById('input-import-data').disabled = false;
             document.getElementById('set-pp').readOnly = false;
             document.getElementById('set-pp').classList.remove('bg-slate-200');
             document.getElementById('set-qr-mode').disabled = false;
