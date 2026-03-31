@@ -2,7 +2,7 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  const APP_VERSION = '11.3.2';
+  const APP_VERSION = '11.3.3';
 
   const storedAppVersion = localStorage.getItem('vpos-app-version');
   if (storedAppVersion !== APP_VERSION) {
@@ -124,7 +124,7 @@
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="./icon-192.png">
 
-    <title>PosThaiban V11.3.2</title>
+    <title>PosThaiban V11.3.3</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -242,7 +242,7 @@
                         <span id="net-txt" class="text-[9px] font-bold text-emerald-500 uppercase">Online</span>
                     </div>
                 </div>
-                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.3.2 PRO (STABLE OFFLINE)</p>
+                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.3.3 PRO (STABLE OFFLINE)</p>
             </div>
         </div>
         <div class="flex gap-2">
@@ -1257,6 +1257,9 @@
         // 🟢 --- อัปเกรด Scanner ให้สแกนแช่ได้ (Continuous Mode) ---
         let isScanningProcess = false;
         const isMobileDevice = () => /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+        const isSecureContextForCamera = () => location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        const SCANNER_FPS = isMobileDevice() ? 10 : 15;
+        const SCANNER_BOX = isMobileDevice() ? { width: 220, height: 220 } : { width: 250, height: 250 };
 
         async function forceReleaseCameraTracks() {
             const reader = document.getElementById('reader');
@@ -1294,48 +1297,83 @@
             }
         }
 
+        async function startCameraWithFallback(scanner) {
+            const scannerConfig = { fps: SCANNER_FPS, qrbox: SCANNER_BOX, aspectRatio: 1.0 };
+            const attempts = [];
+            if (isMobileDevice()) attempts.push({ facingMode: { exact: 'environment' } });
+            attempts.push({ facingMode: { ideal: 'environment' } });
+            attempts.push({ facingMode: 'environment' });
+            attempts.push({ facingMode: 'user' });
+
+            try {
+                const cameras = await Html5Qrcode.getCameras();
+                if (Array.isArray(cameras) && cameras.length > 0) {
+                    const rearCam = cameras.find((cam) => /(back|rear|environment)/i.test(cam.label || ''));
+                    if (rearCam?.id) attempts.unshift(rearCam.id);
+                    else if (cameras[0].id) attempts.unshift(cameras[0].id);
+                }
+            } catch (_) {}
+
+            let lastErr = null;
+            for (const cameraInput of attempts) {
+                try {
+                    await scanner.start(cameraInput, scannerConfig, onScannerDecode);
+                    return;
+                } catch (err) {
+                    lastErr = err;
+                }
+            }
+
+            throw lastErr || new Error('Cannot start camera');
+        }
+
+        async function onScannerDecode(txt) {
+            if(isScanningProcess) return; // 🟢 ป้องกันการสแกนรัวเกินไป
+            isScanningProcess = true;
+
+            if(scanTargetPage === 'pos') {
+                const inventory = await vdb.inventory.toArray();
+                const i = inventory.find(inv => inv.barcode === txt);
+                if(i) {
+                    addToCart(i.id);
+                    showToast(`✅ เพิ่ม ${i.name} ลงตะกร้าแล้ว!`); // โชว์ Popup
+                } else {
+                    playSound('warn');
+                    showToast(`❌ ไม่พบสินค้าบาร์โค้ด: ${txt}`);
+                }
+                await renderPOS();
+                // 🟢 หน่วงเวลา 1.5 วิ ค่อยเปิดรับสแกนชิ้นต่อไป (กล้องไม่ปิด)
+                setTimeout(() => { isScanningProcess = false; }, 1500);
+            } else {
+                document.getElementById('inv-barcode').value = txt;
+                playSound('success');
+                stopScanner(); // ถ้าอยู่หน้าสต็อก ให้ปิดกล้องไปเลย
+                isScanningProcess = false;
+            }
+        }
+
+        let scanTargetPage = 'pos';
         function startScanner(t) {
             const modal = document.getElementById('scanner-modal');
             modal.classList.remove('hidden');
+            scanTargetPage = t;
 
             setTimeout(async () => {
                 try {
+                    if (!isSecureContextForCamera()) {
+                        throw new Error('Camera requires https or localhost');
+                    }
                     await stopScanner();
                     modal.classList.remove('hidden');
 
                     html5QrScanner = new Html5Qrcode("reader");
-                    const cameraConfig = isMobileDevice() ? { facingMode: { ideal: 'environment' } } : { facingMode: 'environment' };
-                    await html5QrScanner.start(
-                        cameraConfig,
-                        { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
-                        async (txt) => {
-                            if(isScanningProcess) return; // 🟢 ป้องกันการสแกนรัวเกินไป
-                            isScanningProcess = true;
-
-                            if(t === 'pos') {
-                                const inventory = await vdb.inventory.toArray();
-                                const i = inventory.find(inv => inv.barcode === txt);
-                                if(i) {
-                                    addToCart(i.id);
-                                    showToast(`✅ เพิ่ม ${i.name} ลงตะกร้าแล้ว!`); // โชว์ Popup
-                                } else {
-                                    playSound('warn');
-                                    showToast(`❌ ไม่พบสินค้าบาร์โค้ด: ${txt}`);
-                                }
-                                await renderPOS();
-                                // 🟢 หน่วงเวลา 1.5 วิ ค่อยเปิดรับสแกนชิ้นต่อไป (กล้องไม่ปิด)
-                                setTimeout(() => { isScanningProcess = false; }, 1500);
-                            } else {
-                                document.getElementById('inv-barcode').value = txt;
-                                playSound('success');
-                                stopScanner(); // ถ้าอยู่หน้าสต็อก ให้ปิดกล้องไปเลย
-                                isScanningProcess = false;
-                            }
-                        }
-                    );
+                    await startCameraWithFallback(html5QrScanner);
                 } catch (err) {
                     console.error("Camera Error:", err);
-                    vNotify("กล้องมีปัญหา หรือบราวเซอร์ไม่ได้รับอนุญาตให้ใช้กล้อง", "แจ้งเตือน", "⚠️");
+                    const msg = isSecureContextForCamera()
+                        ? "กล้องมีปัญหา หรือบราวเซอร์ไม่ได้รับอนุญาตให้ใช้กล้อง"
+                        : "มือถือจะเปิดกล้องได้เฉพาะ HTTPS หรือ localhost เท่านั้น";
+                    vNotify(msg, "แจ้งเตือน", "⚠️");
                     stopScanner();
                 }
             }, 300);
