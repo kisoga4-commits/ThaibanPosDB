@@ -1,9 +1,9 @@
 /**
- * PosThaiban - Service Worker (Silent update)
- * ใช้การอัปเดตแบบเงียบ ไม่มี popup/force reload
+ * PosThaiban - Service Worker (Fast update + cache cleanup)
  */
 
-const CACHE_NAME = 'posthaiban-shell-v11-3-1';
+const CACHE_VERSION = 'v11-3-4';
+const CACHE_NAME = `posthaiban-shell-${CACHE_VERSION}`;
 const SHELL_CACHE_PREFIX = 'posthaiban-shell-';
 const APP_SHELL = [
   './',
@@ -32,7 +32,11 @@ self.addEventListener('activate', (event) => {
       keys
         .filter((key) => key.startsWith(SHELL_CACHE_PREFIX) && key !== CACHE_NAME)
         .map((key) => caches.delete(key))
-    )).then(() => self.clients.claim())
+    )).then(async () => {
+      await self.clients.claim();
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      clients.forEach((client) => client.postMessage({ type: 'SW_ACTIVATED', version: CACHE_VERSION }));
+    })
   );
 });
 
@@ -55,7 +59,7 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then((response) => {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', clone));

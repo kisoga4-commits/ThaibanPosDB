@@ -2,13 +2,16 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  const APP_VERSION = '11.3.3';
+  const APP_VERSION = '11.3.4';
+  const APP_CACHE_PREFIX = 'posthaiban-shell-';
+  const RELOAD_GUARD_KEY = 'vpos-sw-reloaded-once';
 
   const storedAppVersion = localStorage.getItem('vpos-app-version');
   if (storedAppVersion !== APP_VERSION) {
     localStorage.setItem('vpos-app-version', APP_VERSION);
+    sessionStorage.removeItem(RELOAD_GUARD_KEY);
     if ('caches' in window) {
-      caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('posthaiban-shell-')).map((key) => caches.delete(key)))).catch(() => {});
+      caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith(APP_CACHE_PREFIX)).map((key) => caches.delete(key)))).catch(() => {});
     }
   }
 
@@ -18,7 +21,7 @@
   let installRelatedAppsChecked = false;
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register(`./sw.js?v=${APP_VERSION}`, { updateViaCache: 'none' })
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
         .then((reg) => {
           swRegistration = reg;
           if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
@@ -37,8 +40,9 @@
     }, { once: true });
 
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      // ไม่ force reload อัตโนมัติ เพื่อไม่รบกวนการใช้งานหน้าปัจจุบัน
-      // ให้ใช้งาน session ปัจจุบันต่อได้ตามปกติ และค่อยรับไฟล์เวอร์ชันใหม่ในรอบถัดไป
+      if (sessionStorage.getItem(RELOAD_GUARD_KEY) === APP_VERSION) return;
+      sessionStorage.setItem(RELOAD_GUARD_KEY, APP_VERSION);
+      window.location.reload();
     });
   }
 
@@ -124,7 +128,7 @@
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="./icon-192.png">
 
-    <title>PosThaiban V11.3.3</title>
+    <title>PosThaiban V11.3.4</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
