@@ -2,34 +2,17 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  // 🟢 V11.2.4: อัปเกรด Service Worker ให้บังคับลบของเก่าแล้วรีเฟรชหน้าใหม่ทันที
+  // Silent SW update: ลงทะเบียนและเช็กอัปเดตเบื้องหลังโดยไม่รบกวนผู้ใช้
   let swRegistration = null;
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').then(reg => {
-        swRegistration = reg;
-        console.log('SW Registered V11.2.4!', reg);
-        
-        reg.onupdatefound = () => {
-          const installingWorker = reg.installing;
-          installingWorker.onstatechange = () => {
-            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // 🟢 ใช้ vConfirm ของเราเองแทนการใช้ confirm ของระบบ
-              vConfirm('พบระบบ PosThaiban V11.2.4 ใหม่! (บังคับรีเฟรชเพื่อเคลียร์แคช) ข้อมูลสินค้าไม่หาย', 'อัปเดตระบบ', '🔄').then(res => {
-                  if(res) {
-                    installingWorker.postMessage({ type: 'SKIP_WAITING' });
-                    window.location.reload(true); 
-                  }
-              });
-            }
-          };
-        };
-      }).catch(err => console.error('SW Error:', err));
-    });
-    
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      window.location.reload();
-    });
+      navigator.serviceWorker.register('./sw.js')
+        .then((reg) => {
+          swRegistration = reg;
+          setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+        })
+        .catch((err) => console.error('SW Error:', err));
+    }, { once: true });
   }
 
   // 🟢 สถานะเน็ตแบบจุดไข่ปลา
@@ -58,15 +41,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0f172a">
-    
+
     <title>PosThaiban V11.2.4</title>
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
-    
+
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;800;900&display=swap" rel="stylesheet">
-    
+
     <style>
         body { font-family: 'Kanit', sans-serif; background: #f1f5f9; touch-action: manipulation; overscroll-behavior-y: none; user-select: none; -webkit-user-select: none; }
         input, select, textarea { user-select: text; -webkit-user-select: text; }
@@ -76,14 +59,14 @@
         .product-card:active { transform: scale(0.95); }
         .img-box { width: 100%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; background: #f8fafc; border-radius: 0.75rem; overflow: hidden; margin-bottom: 6px; }
         .img-box img { max-width: 80%; max-height: 80%; object-fit: contain; }
-        .out-of-stock { opacity: 0.6; } 
+        .out-of-stock { opacity: 0.6; }
         .stock-badge { position: absolute; top: 6px; right: 6px; background: #1e293b; color: white; padding: 1px 6px; border-radius: 8px; font-size: 9px; font-weight: 800; z-index: 10; }
         .qty-ctrl-btn { @apply w-10 h-10 flex items-center justify-center rounded-xl font-bold shadow-md transition-all active:scale-90 text-base; }
         header { padding-top: calc(0.75rem + env(safe-area-inset-top)); }
         .keyboard-active #cart-bar { display: none !important; }
         body:not(.pos-active) #cart-bar { display: none !important; }
         .trial-locked { opacity: 0.5; pointer-events: none; filter: grayscale(100%); }
-        
+
         #reader { width: 100% !important; max-width: 400px; margin: auto; background: black; border-radius: 1.5rem; overflow: hidden; border: 4px solid white; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
         #reader video { border-radius: 1.25rem; object-fit: cover; }
         #reader__dashboard_section_csr span { color: white !important; }
@@ -105,6 +88,19 @@
         </div>
     </div>
 
+    <div id="admin-modal" class="fixed inset-0 bg-slate-900/90 z-[10000] hidden flex items-center justify-center p-6 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-xs rounded-[2.5rem] p-8 text-center shadow-2xl border-2 border-indigo-500/20">
+            <div class="text-4xl mb-4">🔐</div>
+            <h3 class="text-xl font-black text-slate-900 mb-2 italic">เข้าสู่ระบบ Admin</h3>
+            <p class="text-sm text-slate-500 font-bold mb-4 italic">กรอกรหัสผู้ดูแลระบบ</p>
+            <input id="admin-pass-input" type="password" class="w-full p-3 rounded-xl border border-slate-200 text-center font-bold outline-none focus:border-indigo-500" placeholder="รหัส Admin">
+            <div class="flex gap-3 mt-6">
+                <button id="admin-modal-cancel" class="flex-1 bg-slate-100 py-4 rounded-2xl font-black text-slate-500 text-xs uppercase active:scale-95">ยกเลิก</button>
+                <button id="admin-modal-confirm" class="flex-[2] bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95">เข้าสู่ระบบ</button>
+            </div>
+        </div>
+    </div>
+
     <div id="license-lock" class="fixed inset-0 bg-slate-900/95 z-[9999] flex flex-col items-center justify-center p-6 text-white hidden backdrop-blur-md overflow-y-auto">
         <div class="w-full max-w-sm bg-slate-800 p-8 rounded-[2.5rem] border border-slate-700 shadow-2xl my-auto">
             <div class="text-center mb-6">
@@ -114,7 +110,7 @@
                 <h2 class="text-2xl font-black italic">อัปเกรดเป็น <span class="text-indigo-400">V11 PRO</span></h2>
                 <p class="text-xs text-slate-400 mt-2">ปลดล็อคพลังเต็มรูปแบบ เพื่อยอดขายที่พุ่งทะยาน</p>
             </div>
-            
+
             <div class="bg-slate-900/50 p-5 rounded-2xl mb-6 space-y-3 text-sm font-bold text-slate-300">
                 <div class="flex items-center gap-3"><span class="text-emerald-400 text-lg">✅</span> เพิ่มสินค้าได้ไม่จำกัด (ปกติ 5 ชิ้น)</div>
                 <div class="flex items-center gap-3"><span class="text-emerald-400 text-lg">✅</span> ดูยอดขายย้อนหลัง สัปดาห์/เดือน ได้</div>
@@ -135,7 +131,7 @@
                 <input type="text" id="lic-key" placeholder="กรอกรหัส LICENSE KEY ที่นี่" class="w-full p-4 rounded-xl bg-slate-950 border border-indigo-500/50 text-indigo-400 text-center font-black outline-none uppercase tracking-widest focus:border-indigo-400 transition-all">
                 <button onclick="unlockSystem()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-black text-sm shadow-xl active:scale-95 transition-all text-white">ยืนยันการปลดล็อค 🔓</button>
             </div>
-            
+
             <button onclick="closeLockScreen()" class="mt-6 w-full text-slate-500 font-bold text-xs uppercase underline underline-offset-4 active:scale-95">ไว้ทีหลัง (ใช้งานรุ่นทดลองต่อ)</button>
         </div>
     </div>
@@ -174,7 +170,7 @@
     <main class="flex-1 overflow-y-auto p-4 no-scrollbar pb-40 relative">
         <div id="page-pos" class="page space-y-4">
             <div class="flex gap-2">
-                <input type="text" id="search-input" oninput="renderPOS()" onkeydown="handleSearchScanner(event)" onfocus="setKeyboard(true)" onblur="setKeyboard(false)" placeholder="🔍 ค้นหาสินค้า..." class="flex-1 p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 outline-none text-base">
+                <input type="text" id="search-input" oninput="handleSearchInput()" onkeydown="handleSearchScanner(event)" onfocus="setKeyboard(true)" onblur="setKeyboard(false)" placeholder="🔍 ค้นหาสินค้า..." class="flex-1 p-3.5 rounded-xl bg-white shadow-sm border border-slate-200 outline-none text-base">
                 <button onclick="startScanner('pos')" class="bg-indigo-600 text-white px-6 rounded-xl flex items-center justify-center shadow-lg active:scale-95 font-bold">📷 สแกน</button>
             </div>
 
@@ -192,23 +188,23 @@
                 <div class="flex justify-between items-center mb-4">
                     <h3 id="inv-form-title" class="font-bold text-slate-800 text-base">📦 เพิ่ม/แก้ไขสินค้า</h3>
                 </div>
-                
+
                 <div class="grid grid-cols-2 gap-3">
                     <div class="flex gap-2 col-span-1">
                         <input id="inv-barcode" placeholder="บาร์โค้ด" class="w-full p-3 bg-slate-50 border rounded-xl text-sm font-bold outline-none focus:border-indigo-400">
                         <button onclick="startScanner('inventory')" class="bg-indigo-600 text-white w-12 rounded-xl flex items-center justify-center shadow-md active:scale-95 shrink-0">📷</button>
                     </div>
-                    
+
                     <input id="inv-name" placeholder="ชื่อสินค้า" class="p-3 bg-slate-50 border rounded-xl text-sm font-bold outline-none focus:border-indigo-400">
                     <input id="inv-price" type="number" placeholder="ราคา" class="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-lg font-black text-indigo-600 text-center outline-none">
                     <input id="inv-qty" type="number" placeholder="สต็อก" class="p-3 bg-slate-50 border rounded-xl text-lg font-bold text-center outline-none">
                     <input id="inv-cat" placeholder="หมวดหมู่" class="col-span-2 p-3 bg-slate-50 border rounded-xl text-sm outline-none" list="category-list">
-                    
+
                     <label class="col-span-2 bg-slate-100 p-4 rounded-xl text-center font-bold text-xs text-slate-500 cursor-pointer border-2 border-dashed hover:bg-slate-200 transition-colors">📸 ถ่ายรูปสด หรือ เลือกรูปจากเครื่อง <input type="file" id="inv-img-input" accept="image/*" class="hidden" onchange="processImage(this)"></label>
-                    
+
                     <div id="inv-img-wrap" class="col-span-2 flex justify-center hidden"><img id="inv-img-preview" class="w-24 h-24 rounded-xl border p-1 bg-white object-contain"></div>
                     <input type="hidden" id="edit-id">
-                    
+
                     <div class="col-span-2 flex gap-2">
                         <button onclick="resetInvForm()" id="cancel-edit-btn" class="hidden flex-1 bg-rose-50 text-rose-500 py-4 rounded-2xl font-black text-base shadow-sm active:scale-95 transition-transform border border-rose-100">ยกเลิก</button>
                         <button onclick="addItem()" id="save-btn" class="flex-[2] bg-slate-900 text-white py-4 rounded-2xl font-black text-base shadow-xl active:scale-95 transition-transform">บันทึกสินค้า ✅</button>
@@ -224,7 +220,7 @@
                 <button onclick="setReportRange('week')" id="btn-range-week" class="flex-1 py-2 rounded-lg font-bold text-[10px] text-slate-500">7 วัน</button>
                 <button onclick="setReportRange('month')" id="btn-range-month" class="flex-1 py-2 rounded-lg font-bold text-[10px] text-slate-500">30 วัน</button>
             </div>
-            
+
             <div class="bg-indigo-600 p-5 rounded-[1.5rem] text-white shadow-lg text-center relative overflow-hidden">
                 <div class="absolute top-0 right-0 p-4 opacity-10 text-6xl">📈</div>
                 <p class="text-[9px] opacity-60 font-black uppercase tracking-widest relative z-10">ยอดขายสุทธิ</p>
@@ -242,7 +238,7 @@
             </div>
             <div id="report-log-view" class="space-y-2"></div>
             <div id="report-items-view" class="hidden space-y-2"></div>
-            
+
             <button onclick="clearAllSales()" id="btn-clear-sales" class="hidden mt-6 w-full bg-rose-50 text-rose-500 py-4 rounded-xl font-bold border border-rose-100 text-[10px] uppercase shadow-sm active:scale-95">🗑️ ล้างประวัติยอดขายทั้งหมด</button>
         </div>
 
@@ -275,15 +271,15 @@
                 <input type="password" id="set-pass" placeholder="เปลี่ยนรหัส Admin ใหม่" class="w-full p-4 bg-slate-50 border rounded-2xl text-xs font-bold text-center outline-none">
                 <button onclick="saveSettings()" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-base shadow-lg active:scale-95 transition-transform">บันทึกตั้งค่า ✅</button>
             </div>
-            
+
             <div class="bg-white p-6 rounded-[2.5rem] border shadow-sm space-y-4 text-center">
                 <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">อัปเดต & จัดการข้อมูล (ID: <span id="display-settings-hw" class="text-indigo-500 font-mono"></span>)</p>
-                
+
                 <button onclick="forceSyncUpdate()" class="w-full bg-emerald-50 text-emerald-600 py-4 rounded-xl font-bold text-xs uppercase active:scale-95 shadow-sm transition-transform border border-emerald-100">🔄 ตรวจสอบเวอร์ชันใหม่ (Sync)</button>
-                
+
                 <button onclick="exportData()" class="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-xs uppercase active:scale-95 shadow-lg transition-transform">📥 สำรองข้อมูล (Backup)</button>
                 <label id="btn-import-data" class="block w-full bg-slate-50 text-slate-600 py-4 rounded-xl font-bold text-xs border border-slate-200 text-center cursor-pointer uppercase active:scale-95 transition-transform">📤 คืนค่า (Import) <input type="file" id="input-import-data" accept=".json" class="hidden" onchange="importData(this)"></label>
-                
+
                 <button onclick="logoutAdmin()" class="mt-4 text-[10px] text-rose-400 font-bold underline">ออกจากระบบ Admin</button>
                 <button id="btn-relock-license" onclick="lockSystem()" class="hidden text-[10px] text-amber-500 font-bold underline">🔒 ล็อคกลับเป็นโหมดทดลอง (Trial)</button>
             </div>
@@ -317,7 +313,7 @@
         <div id="reader"></div>
         <button onclick="stopScanner()" class="mt-8 bg-white px-10 py-4 rounded-full font-black text-indigo-600 shadow-2xl active:scale-95">❌ ปิดกล้องเพื่อคิดเงิน</button>
     </div>
-    
+
     <datalist id="category-list"></datalist>
 
     <script>
@@ -363,8 +359,8 @@
         const vdb = new Dexie("VillagePOSDB");
         vdb.version(1).stores({
             inventory: 'id, barcode, category',
-            sales: 'id, date', 
-            settings: 'id' 
+            sales: 'id, date',
+            settings: 'id'
         });
 
         async function getCanvasID() {
@@ -374,12 +370,12 @@
             ctx.fillRect(125,1,62,20); ctx.fillStyle = "#069"; ctx.fillText("POS-System-2026-By-You", 2, 15);
             ctx.fillStyle = "rgba(102, 204, 0, 0.7)"; ctx.fillText("POS-System-2026-By-You", 4, 17);
             const result = canvas.toDataURL();
-            
+
             const msgBuffer = new TextEncoder().encode(result);
             const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
             const hashArray = Array.from(new Uint8Array(hashBuffer));
             const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return "HW-" + hashHex.slice(-8).toUpperCase(); 
+            return "HW-" + hashHex.slice(-8).toUpperCase();
         }
 
         let currentHWID = "";
@@ -479,7 +475,7 @@
                 if (navigator.storage && navigator.storage.persist) {
                     await navigator.storage.persist();
                 }
-                
+
                 updateNetStatusUI();
 
                 currentHWID = await getCanvasID();
@@ -495,9 +491,10 @@
                 await refreshLicenseState();
 
                 applySettingsToUI(conf);
-                
+                await scheduleInventoryRefresh();
+
                 if(isAdmin) { document.getElementById('admin-btn').innerText = '🔓 ADMIN'; document.getElementById('btn-clear-sales').classList.remove('hidden'); }
-                showPage('pos'); 
+                showPage('pos');
             } catch (e) {
                 console.error("Init Error:", e);
                 vNotify("เกิดข้อผิดพลาดในการโหลดฐานข้อมูล", "ผิดพลาด", "❌");
@@ -521,7 +518,7 @@
             document.getElementById('set-pp').readOnly = true;
             document.getElementById('set-pp').classList.add('bg-slate-200');
             document.getElementById('set-qr-mode').value = 'offline';
-            document.getElementById('set-qr-mode').disabled = true; 
+            document.getElementById('set-qr-mode').disabled = true;
             document.getElementById('btn-range-week').classList.add('trial-locked');
             document.getElementById('btn-range-month').classList.add('trial-locked');
             document.getElementById('report-date-select').disabled = true;
@@ -584,11 +581,15 @@
             showPage('pos');
         }
 
-        let cart = []; 
+        let cart = [];
         let isAdmin = localStorage.getItem('vpos_admin') === 'true';
-        let currentRange = 'today'; let compressedImageBase64 = "";
+        let currentRange = 'today'; let compressedImageBase64 = ""; let compressedImageThumbBase64 = "";
         let audioCtx; let html5QrScanner = null;
-        let customerWindow = null; 
+        let customerWindow = null;
+        let inventoryCache = [];
+        let selectedCategory = 'ทั้งหมด';
+        let searchDebounceTimer = null;
+        let pendingInventoryRefresh = null;
 
         function applySettingsToUI(conf) {
             document.getElementById('display-shop-name').innerText = conf.shopName;
@@ -604,17 +605,17 @@
             let conf = await vdb.settings.get('config');
             conf.shopName = document.getElementById('set-shop-name').value;
             conf.bankName = document.getElementById('set-bank').value;
-            
+
             const proEnabled = await ensureProAccess(false);
             if(proEnabled) {
                 conf.promptpay = document.getElementById('set-pp').value;
                 conf.qrMode = document.getElementById('set-qr-mode').value;
             } else {
-                conf.qrMode = 'offline'; 
+                conf.qrMode = 'offline';
             }
-            
+
             if(document.getElementById('set-pass').value) conf.password = document.getElementById('set-pass').value;
-            
+
             await vdb.settings.put(conf);
             applySettingsToUI(conf);
             vNotify("บันทึกตั้งค่าเรียบร้อย!", "สำเร็จ", "✅");
@@ -625,134 +626,179 @@
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
             document.getElementById('page-'+n).classList.remove('hidden');
             document.getElementById('tab-'+n).classList.add('active-tab');
-            if(n === 'pos') { document.body.classList.add('pos-active'); await renderPOS(); } 
+            if(n === 'pos') { document.body.classList.add('pos-active'); await renderPOS(); }
             else { document.body.classList.remove('pos-active'); if(n==='inventory') await renderInventory(); if(n==='report') await renderReport(); }
         }
 
-        async function toggleAdmin() { 
-            if(isAdmin) { 
+        function openAdminPasswordModal() {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('admin-modal');
+                const input = document.getElementById('admin-pass-input');
+                const close = (value) => {
+                    modal.classList.add('hidden');
+                    input.value = '';
+                    resolve(value);
+                };
+                modal.classList.remove('hidden');
+                input.focus();
+                document.getElementById('admin-modal-confirm').onclick = () => close(input.value);
+                document.getElementById('admin-modal-cancel').onclick = () => close(null);
+                input.onkeydown = (e) => {
+                    if (e.key === 'Enter') close(input.value);
+                    if (e.key === 'Escape') close(null);
+                };
+            });
+        }
+
+        async function toggleAdmin() {
+            if(isAdmin) {
                 if(await vConfirm('ต้องการล็อคระบบ Admin ตอนนี้หรือไม่?', 'ล็อคระบบ', '🔒')) {
                     await logoutAdmin();
                 }
             } else {
                 let conf = await vdb.settings.get('config');
-                const p = prompt("รหัส Admin:"); 
-                if(p === conf.password) { 
-                    isAdmin = true; localStorage.setItem('vpos_admin', 'true'); 
-                    document.getElementById('admin-btn').innerText = '🔓 ADMIN'; 
+                const p = await openAdminPasswordModal();
+                if(p === conf.password) {
+                    isAdmin = true; localStorage.setItem('vpos_admin', 'true');
+                    document.getElementById('admin-btn').innerText = '🔓 ADMIN';
                     document.getElementById('btn-clear-sales').classList.remove('hidden');
-                } else if(p!==null) vNotify("รหัสผิด!", "ผิดพลาด", "❌"); 
+                } else if(p!==null) vNotify("รหัสผิด!", "ผิดพลาด", "❌");
             }
         }
-        async function logoutAdmin() { isAdmin = false; localStorage.removeItem('vpos_admin'); await vNotify("ออกจากระบบ Admin เรียบร้อย"); location.reload(); } 
+        async function logoutAdmin() { isAdmin = false; localStorage.removeItem('vpos_admin'); await vNotify("ออกจากระบบ Admin เรียบร้อย"); location.reload(); }
         function checkAdminAccess(p) { if(isAdmin) showPage(p); else vNotify("เข้าสู่ระบบ (Login) ก่อนครับ!", "แจ้งเตือน", "🔒"); }
+
+        function scheduleInventoryRefresh() {
+            if (pendingInventoryRefresh) return pendingInventoryRefresh;
+            pendingInventoryRefresh = new Promise((resolve) => {
+                const run = async () => {
+                    inventoryCache = await vdb.inventory.toArray();
+                    pendingInventoryRefresh = null;
+                    resolve(inventoryCache);
+                };
+                if ('requestIdleCallback' in window) requestIdleCallback(() => run(), { timeout: 500 });
+                else setTimeout(run, 0);
+            });
+            return pendingInventoryRefresh;
+        }
 
         async function renderInventory() {
             const list = document.getElementById('inventory-list');
-            const inventory = await vdb.inventory.toArray();
-            
-            list.innerHTML = inventory.slice().reverse().map(i => `<div class="bg-white p-4 rounded-xl border flex justify-between items-center shadow-md"><div class="flex items-center gap-4"><img src="${i.img || 'https://via.placeholder.com/80'}" class="w-16 h-16 rounded-xl border object-contain bg-slate-50"><div><p class="font-bold text-sm text-slate-800">${i.name}</p><p class="text-base font-black text-indigo-600">฿${i.price}</p></div></div><div class="flex items-center gap-3"><button onclick="updateStock(${i.id}, -1)" class="qty-ctrl-btn bg-rose-50 text-rose-500">－</button><span class="font-black text-xl w-8 text-center">${i.qty}</span><button onclick="updateStock(${i.id}, 1)" class="qty-ctrl-btn bg-emerald-50 text-emerald-500">＋</button><button onclick="editItem(${i.id})" class="text-indigo-400 font-bold ml-2 text-sm">📝</button><button onclick="deleteItem(${i.id})" class="text-rose-400 font-bold text-sm">🗑️</button></div></div>`).join('');
-            
+            const inventory = await scheduleInventoryRefresh();
+
+            list.innerHTML = inventory.slice().reverse().map(i => `<div class="bg-white p-4 rounded-xl border flex justify-between items-center shadow-md"><div class="flex items-center gap-4"><img loading="lazy" decoding="async" src="${i.thumb || i.img || 'https://via.placeholder.com/80'}" class="w-16 h-16 rounded-xl border object-contain bg-slate-50"><div><p class="font-bold text-sm text-slate-800">${i.name}</p><p class="text-base font-black text-indigo-600">฿${i.price}</p></div></div><div class="flex items-center gap-3"><button onclick="updateStock(${i.id}, -1)" class="qty-ctrl-btn bg-rose-50 text-rose-500">－</button><span class="font-black text-xl w-8 text-center">${i.qty}</span><button onclick="updateStock(${i.id}, 1)" class="qty-ctrl-btn bg-emerald-50 text-emerald-500">＋</button><button onclick="editItem(${i.id})" class="text-indigo-400 font-bold ml-2 text-sm">📝</button><button onclick="deleteItem(${i.id})" class="text-rose-400 font-bold text-sm">🗑️</button></div></div>`).join('');
+
             const cats = ['ทั้งหมด', ...new Set(inventory.map(i => i.category))];
             document.getElementById('category-bar').innerHTML = cats.map(c => `<button onclick="renderPOS('${c}')" class="px-4 py-2 rounded-xl text-[10px] font-bold border bg-white shadow-sm whitespace-nowrap active:scale-95">${c}</button>`).join('');
         }
 
-        async function updateStock(id, delta) { 
+        async function updateStock(id, delta) {
             const item = await vdb.inventory.get(id);
-            if(item) { item.qty += delta; await vdb.inventory.put(item); await renderInventory(); await renderPOS(); }
-        }
-        
-        async function deleteItem(id) { 
-            if(await vConfirm('ต้องการลบสินค้านี้ใช่หรือไม่?', 'ยืนยันการลบ', '🗑️')) { 
-                await vdb.inventory.delete(id); await renderInventory(); await renderPOS(); 
-            } 
+            if(item) { item.qty += delta; await vdb.inventory.put(item); await scheduleInventoryRefresh(); await renderInventory(); await renderPOS(selectedCategory); }
         }
 
-        async function addItem() { 
-            const n = document.getElementById('inv-name').value; const p = parseFloat(document.getElementById('inv-price').value); 
-            if(!n || isNaN(p)) return; 
-            
+        async function deleteItem(id) {
+            if(await vConfirm('ต้องการลบสินค้านี้ใช่หรือไม่?', 'ยืนยันการลบ', '🗑️')) {
+                await vdb.inventory.delete(id); await scheduleInventoryRefresh(); await renderInventory(); await renderPOS(selectedCategory);
+            }
+        }
+
+        async function addItem() {
+            const n = document.getElementById('inv-name').value; const p = parseFloat(document.getElementById('inv-price').value);
+            if(!n || isNaN(p)) return;
+
             if(!(await ensureProAccess(false)) && !document.getElementById('edit-id').value) {
                 const count = await vdb.inventory.count();
                 if(count >= 5) {
-                    showLockScreen(); 
+                    showLockScreen();
                     return;
                 }
             }
 
-            const editId = document.getElementById('edit-id').value; 
+            const editId = document.getElementById('edit-id').value;
             const itemData = {
-                barcode: document.getElementById('inv-barcode').value.trim(), 
-                name: n, price: p, 
-                qty: parseInt(document.getElementById('inv-qty').value || 0), 
+                barcode: document.getElementById('inv-barcode').value.trim(),
+                name: n, price: p,
+                qty: parseInt(document.getElementById('inv-qty').value || 0),
                 category: document.getElementById('inv-cat').value.trim() || 'ทั่วไป'
             };
 
-            if(editId) { 
+            if(editId) {
                 const oldItem = await vdb.inventory.get(parseInt(editId));
                 itemData.id = parseInt(editId);
                 itemData.img = compressedImageBase64 || oldItem.img;
+                itemData.thumb = compressedImageThumbBase64 || oldItem.thumb || oldItem.img;
                 itemData.sold = oldItem.sold || 0;
-                await vdb.inventory.put(itemData); 
-            } else { 
+                await vdb.inventory.put(itemData);
+            } else {
                 itemData.id = Date.now();
                 itemData.img = compressedImageBase64;
+                itemData.thumb = compressedImageThumbBase64;
                 itemData.sold = 0;
                 await vdb.inventory.put(itemData);
-            } 
-            resetInvForm(); await renderInventory(); await renderPOS(); 
+            }
+            await scheduleInventoryRefresh();
+            resetInvForm(); await renderInventory(); await renderPOS(selectedCategory);
             showToast("บันทึกข้อมูลสำเร็จ");
         }
 
-        async function editItem(id) { 
-            const i = await vdb.inventory.get(id); 
-            document.getElementById('edit-id').value = i.id; document.getElementById('inv-barcode').value = i.barcode; document.getElementById('inv-name').value = i.name; document.getElementById('inv-price').value = i.price; document.getElementById('inv-qty').value = i.qty; document.getElementById('inv-cat').value = i.category; 
-            if(i.img) { document.getElementById('inv-img-preview').src = i.img; document.getElementById('inv-img-wrap').classList.remove('hidden'); compressedImageBase64 = i.img; } 
-            document.getElementById('inv-form-title').innerText = '🔥 แก้ไข: ' + i.name; 
-            document.getElementById('cancel-edit-btn').classList.remove('hidden'); 
-            window.scrollTo({ top: 0, behavior: 'smooth' }); 
-        }
-        
-        function resetInvForm() { 
-            document.getElementById('edit-id').value = ''; 
-            ['inv-barcode','inv-name','inv-price','inv-qty','inv-cat'].forEach(id => document.getElementById(id).value = ''); 
-            document.getElementById('inv-img-wrap').classList.add('hidden'); 
-            compressedImageBase64 = ""; 
-            document.getElementById('inv-form-title').innerText = '📦 เพิ่มสินค้าใหม่'; 
-            document.getElementById('cancel-edit-btn').classList.add('hidden'); 
+        async function editItem(id) {
+            const i = await vdb.inventory.get(id);
+            document.getElementById('edit-id').value = i.id; document.getElementById('inv-barcode').value = i.barcode; document.getElementById('inv-name').value = i.name; document.getElementById('inv-price').value = i.price; document.getElementById('inv-qty').value = i.qty; document.getElementById('inv-cat').value = i.category;
+            if(i.img) { document.getElementById('inv-img-preview').src = i.thumb || i.img; document.getElementById('inv-img-wrap').classList.remove('hidden'); compressedImageBase64 = i.img; compressedImageThumbBase64 = i.thumb || i.img; }
+            document.getElementById('inv-form-title').innerText = '🔥 แก้ไข: ' + i.name;
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        async function renderPOS(catFilter = 'ทั้งหมด') {
-            const search = document.getElementById('search-input').value.toLowerCase(); const grid = document.getElementById('pos-grid'); grid.innerHTML = '';
-            const inventory = await vdb.inventory.toArray();
+        function resetInvForm() {
+            document.getElementById('edit-id').value = '';
+            ['inv-barcode','inv-name','inv-price','inv-qty','inv-cat'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('inv-img-wrap').classList.add('hidden');
+            compressedImageBase64 = "";
+            compressedImageThumbBase64 = "";
+            document.getElementById('inv-form-title').innerText = '📦 เพิ่มสินค้าใหม่';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+        }
+
+        function handleSearchInput() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => renderPOS(selectedCategory), 250);
+        }
+
+        async function renderPOS(catFilter = selectedCategory) {
+            selectedCategory = catFilter;
+            const search = document.getElementById('search-input').value.toLowerCase().trim();
+            const grid = document.getElementById('pos-grid');
+            grid.innerHTML = '';
+            const inventory = inventoryCache.length ? inventoryCache : await scheduleInventoryRefresh();
 
             const best = [...inventory].sort((a,b) => (b.sold||0)-(a.sold||0)).filter(i => (i.sold||0)>0).slice(0, 8);
             if(best.length > 0 && !search) {
                 document.getElementById('best-seller-section').classList.remove('hidden');
-                document.getElementById('pos-best-sellers').innerHTML = best.map(i => `<div onclick="addToCart(${i.id})" class="min-w-[85px] bg-white p-2 rounded-xl border border-orange-100 text-center shadow-sm active:scale-95 ${i.qty <= 0 ? 'out-of-stock' : ''}"><div class="img-box h-12 mb-1"><img src="${i.img || 'https://via.placeholder.com/60'}"></div><p class="font-bold text-[7px] truncate">${i.name}</p><p class="text-[9px] font-black text-orange-600 mt-1">฿${i.price}</p></div>`).join('');
+                document.getElementById('pos-best-sellers').innerHTML = best.map(i => `<div onclick="addToCart(${i.id})" class="min-w-[85px] bg-white p-2 rounded-xl border border-orange-100 text-center shadow-sm active:scale-95 ${i.qty <= 0 ? 'out-of-stock' : ''}"><div class="img-box h-12 mb-1"><img loading="lazy" decoding="async" src="${i.thumb || i.img || 'https://via.placeholder.com/60'}"></div><p class="font-bold text-[7px] truncate">${i.name}</p><p class="text-[9px] font-black text-orange-600 mt-1">฿${i.price}</p></div>`).join('');
             } else document.getElementById('best-seller-section').classList.add('hidden');
-            
+
             let items = inventory; if(catFilter !== 'ทั้งหมด') items = items.filter(i => i.category === catFilter);
-            items.filter(i => i.name.toLowerCase().includes(search) || i.barcode === search).forEach(i => {
-                grid.innerHTML += `<div onclick="addToCart(${i.id})" class="product-card text-center shadow-sm ${i.qty <= 0 ? 'out-of-stock' : ''}"><div class="stock-badge shadow-sm">${i.qty}</div><div class="img-box"><img src="${i.img || 'https://via.placeholder.com/120'}"></div><p class="font-bold text-[9px] truncate w-full">${i.name}</p><p class="text-xs font-black text-indigo-600">฿${i.price}</p></div>`;
-            });
+            const filtered = items.filter(i => i.name.toLowerCase().includes(search) || i.barcode === search);
+            grid.innerHTML = filtered.map(i => `<div onclick="addToCart(${i.id})" class="product-card text-center shadow-sm ${i.qty <= 0 ? 'out-of-stock' : ''}"><div class="stock-badge shadow-sm">${i.qty}</div><div class="img-box"><img loading="lazy" decoding="async" src="${i.thumb || i.img || 'https://via.placeholder.com/120'}"></div><p class="font-bold text-[9px] truncate w-full">${i.name}</p><p class="text-xs font-black text-indigo-600">฿${i.price}</p></div>`).join('');
         }
 
-        async function addToCart(id) { 
-            const i = await vdb.inventory.get(id); 
-            if(i) { const ex = cart.find(c => c.id === id); if(ex) ex.count = (ex.count || 1) + 1; else cart.push({...i, cartId: Date.now(), count: 1}); playSound('success'); updateCartUI(); } 
+        async function addToCart(id) {
+            const i = await vdb.inventory.get(id);
+            if(i) { const ex = cart.find(c => c.id === id); if(ex) ex.count = (ex.count || 1) + 1; else cart.push({...i, cartId: Date.now(), count: 1}); playSound('success'); updateCartUI(); }
         }
 
         function updateCartUI() {
             const t = cart.reduce((s, i) => s + (i.price * (i.count || 1)), 0);
             document.getElementById('cart-total').innerText = t.toLocaleString();
             document.getElementById('cart-preview').innerHTML = cart.slice().reverse().map(i => `<div onclick="cart=cart.filter(c=>c.cartId!==${i.cartId});updateCartUI();" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[8px] font-black active:scale-95 shadow-sm">${i.name} ${i.count > 1 ? 'x'+i.count : ''} ✕</div>`).join('');
-            syncCustomerDisplay(); 
+            syncCustomerDisplay();
         }
 
         async function confirmSale(method) {
             const t = cart.reduce((s, i) => s + (i.price * (i.count || 1)), 0);
-            
+
             for (let c of cart) {
                 const item = await vdb.inventory.get(c.id);
                 if (item) {
@@ -763,31 +809,32 @@
             }
 
             const now = new Date();
-            await vdb.sales.put({ 
-                id: Date.now(), 
+            await vdb.sales.put({
+                id: Date.now(),
                 timestamp: now.toISOString(),
-                date: now.toDateString(), 
-                total: t, 
-                method: method, 
-                items: cart.map(c => c.name + (c.count > 1 ? ' x'+c.count : '')) 
+                date: now.toDateString(),
+                total: t,
+                method: method,
+                items: cart.map(c => c.name + (c.count > 1 ? ' x'+c.count : ''))
             });
 
-            cart = []; updateCartUI(); closeCheckout(); await renderPOS(); playSound('finish');
+            await scheduleInventoryRefresh();
+            cart = []; updateCartUI(); closeCheckout(); await renderPOS(selectedCategory); playSound('finish');
         }
 
         async function renderReport() {
             if(!(await ensureProAccess(false)) && currentRange !== 'today') {
-                currentRange = 'today'; 
+                currentRange = 'today';
                 document.getElementById('report-date-select').value = '';
             }
 
             const selectDate = document.getElementById('report-date-select').value;
             const now = new Date(); const targetDay = selectDate ? new Date(selectDate).toDateString() : now.toDateString();
-            
+
             let sum = 0; let count = 0; let hitStats = {};
             const logView = document.getElementById('report-log-view'); logView.innerHTML = '';
             const hitView = document.getElementById('report-items-view'); hitView.innerHTML = '';
-            
+
             ['today', 'week', 'month'].forEach(id => { document.getElementById('btn-range-'+id).className = (currentRange===id) ? 'flex-1 py-2 rounded-lg font-bold text-[10px] bg-indigo-50 text-indigo-600 shadow-sm' : 'flex-1 py-2 rounded-lg font-bold text-[10px] text-slate-500'; });
 
             const sales = await vdb.sales.toArray();
@@ -819,16 +866,16 @@
             renderReport();
         }
 
-        async function clearAllSales() { 
-            if(!isAdmin) return vNotify("เฉพาะ Admin เท่านั้น", "แจ้งเตือน", "❌"); 
-            if(await vConfirm("⚠️ ล้างยอดขายทั้งหมด จะไม่สามารถกู้คืนได้ ยืนยันไหม?", "ยืนยันการลบ", "🗑️")) { 
-                await vdb.sales.clear(); 
-                await renderReport(); 
-                vNotify("ล้างยอดขายเรียบร้อย", "สำเร็จ", "✅"); 
-            } 
+        async function clearAllSales() {
+            if(!isAdmin) return vNotify("เฉพาะ Admin เท่านั้น", "แจ้งเตือน", "❌");
+            if(await vConfirm("⚠️ ล้างยอดขายทั้งหมด จะไม่สามารถกู้คืนได้ ยืนยันไหม?", "ยืนยันการลบ", "🗑️")) {
+                await vdb.sales.clear();
+                await renderReport();
+                vNotify("ล้างยอดขายเรียบร้อย", "สำเร็จ", "✅");
+            }
         }
 
-        async function exportData() { 
+        async function exportData() {
             const conf = await vdb.settings.get('config');
             const inv = await vdb.inventory.toArray();
             const sls = await vdb.sales.toArray();
@@ -838,21 +885,21 @@
                 inventory: inv,
                 sales: sls
             };
-            const blob = new Blob([JSON.stringify(exportObj)], {type:"application/json"}); 
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); 
-            a.download = `PosThaiban_Backup_${currentHWID}_${new Date().toISOString().split('T')[0]}.json`; a.click(); 
+            const blob = new Blob([JSON.stringify(exportObj)], {type:"application/json"});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = `PosThaiban_Backup_${currentHWID}_${new Date().toISOString().split('T')[0]}.json`; a.click();
         }
 
-        async function importData(input) { 
+        async function importData(input) {
             if(!(await ensureProAccess(false))) { showLockScreen(); return; }
-            const file = input.files[0]; if(!file) return; const reader = new FileReader(); 
-            reader.onload = async e => { 
-                try { 
-                    const data = JSON.parse(e.target.result); 
-                    if(data.settings && data.inventory) { 
+            const file = input.files[0]; if(!file) return; const reader = new FileReader();
+            reader.onload = async e => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if(data.settings && data.inventory) {
                         if(data.metadata && data.metadata.hwid !== currentHWID) {
                             if(!(await vConfirm("⚠️ นำเข้าจากเครื่องอื่น (HWID ไม่ตรงกัน) ระบบจะให้ปลดล็อคอีกครั้ง ยืนยันนำเข้าไหม?", "คำเตือนระบบ", "⚠️"))) return;
-                            data.settings.licenseKey = ""; 
+                            data.settings.licenseKey = "";
                         }
                         await vdb.transaction('rw', vdb.settings, vdb.inventory, vdb.sales, async () => {
                             await vdb.settings.clear(); await vdb.settings.put(data.settings);
@@ -860,10 +907,10 @@
                             await vdb.sales.clear(); if(data.sales) await vdb.sales.bulkPut(data.sales);
                         });
                         await vNotify("กู้คืนข้อมูลสำเร็จ ระบบจะทำการรีเฟรชหน้าจอ", "สำเร็จ", "✅");
-                        location.reload(); 
+                        location.reload();
                     } else { vNotify("ไฟล์ฐานข้อมูลไม่ถูกต้อง!", "ผิดพลาด", "❌"); }
-                } catch(err) { console.error(err); vNotify("เกิดข้อผิดพลาดในการอ่านไฟล์ JSON!", "ผิดพลาด", "❌"); } 
-            }; reader.readAsText(file); 
+                } catch(err) { console.error(err); vNotify("เกิดข้อผิดพลาดในการอ่านไฟล์ JSON!", "ผิดพลาด", "❌"); }
+            }; reader.readAsText(file);
         }
 
         function showReportTab(tab) {
@@ -872,11 +919,11 @@
             document.getElementById('tab-rep-log').className = `flex-1 py-2.5 rounded-lg font-black text-xs ${tab==='log' ? 'bg-white text-indigo-600 shadow-md':'text-slate-500'}`;
             document.getElementById('tab-rep-items').className = `flex-1 py-2.5 rounded-lg font-black text-xs ${tab==='items' ? 'bg-white text-indigo-600 shadow-md':'text-slate-500'}`;
         }
-        
+
         async function generateQR() {
-            const t = cart.reduce((s, i) => s + (i.price * (i.count || 1)), 0); 
+            const t = cart.reduce((s, i) => s + (i.price * (i.count || 1)), 0);
             let conf = await vdb.settings.get('config');
-            
+
             const qrImg = document.getElementById('qr-image-display'); const statusMsg = document.getElementById('qr-status-msg');
             document.getElementById('qr-area').classList.remove('hidden'); document.getElementById('qr-paid-btn').classList.remove('hidden'); document.getElementById('bank-info-display').innerText = conf.bankName;
 
@@ -895,22 +942,22 @@
                 finalSrc = conf.staticQrImg; qrImg.src = finalSrc;
                 statusMsg.innerText = "⚠️ โหมด Offline: ลูกค้าต้องระบุยอดเงิน ฿" + t.toLocaleString(); statusMsg.classList.remove('hidden');
             }
-            syncCustomerDisplay(finalSrc); 
+            syncCustomerDisplay(finalSrc);
         }
 
         let barcodeBuffer = ''; let barcodeTimer = null;
         window.addEventListener('keydown', async (e) => {
-            if(document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return; 
-            if(e.key.length === 1) { 
+            if(document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+            if(e.key.length === 1) {
                 barcodeBuffer += e.key; clearTimeout(barcodeTimer); barcodeTimer = setTimeout(() => { barcodeBuffer = ''; }, 50);
-            } else if(e.key === 'Enter' && barcodeBuffer.length > 2) { 
+            } else if(e.key === 'Enter' && barcodeBuffer.length > 2) {
                 const inventory = await vdb.inventory.toArray();
                 const item = inventory.find(i => i.barcode === barcodeBuffer);
                 if(item) { addToCart(item.id); showToast(`✅ เพิ่ม ${item.name} ลงตะกร้าแล้ว`); } else playSound('warn');
                 barcodeBuffer = '';
             }
         });
-        
+
         async function handleSearchScanner(e) {
             if(e.key === 'Enter') {
                 const val = e.target.value.trim(); const inventory = await vdb.inventory.toArray();
@@ -918,16 +965,16 @@
                 if(item) { addToCart(item.id); e.target.value = ''; showToast(`✅ เพิ่ม ${item.name} ลงตะกร้าแล้ว`); } else if(val) playSound('warn');
             }
         }
-        
+
         function setKeyboard(isOpen) { if(isOpen) document.body.classList.add('keyboard-active'); else setTimeout(() => document.body.classList.remove('keyboard-active'), 100); }
-        
+
         function playSound(type) {
             if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if(audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator(); const g = audioCtx.createGain(); osc.connect(g); g.connect(audioCtx.destination);
-            g.gain.setValueAtTime(0.2, audioCtx.currentTime); 
-            if(type === 'success') { osc.type = 'square'; osc.frequency.setValueAtTime(800, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1); osc.start(); osc.stop(audioCtx.currentTime + 0.1); } 
-            else if(type === 'warn') { osc.type = 'sine'; osc.frequency.setValueAtTime(200, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3); osc.start(); osc.stop(audioCtx.currentTime + 0.3); } 
+            g.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            if(type === 'success') { osc.type = 'square'; osc.frequency.setValueAtTime(800, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1); osc.start(); osc.stop(audioCtx.currentTime + 0.1); }
+            else if(type === 'warn') { osc.type = 'sine'; osc.frequency.setValueAtTime(200, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3); osc.start(); osc.stop(audioCtx.currentTime + 0.3); }
             else if(type === 'finish') { osc.type = 'triangle'; osc.frequency.setValueAtTime(1200, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5); osc.start(); osc.stop(audioCtx.currentTime + 0.5); }
         }
 
@@ -951,17 +998,64 @@
 
         function openCheckout() { if(!cart.length) return; document.getElementById('final-total').innerText = document.getElementById('cart-total').innerText; document.getElementById('modal-checkout').classList.remove('hidden'); syncCustomerDisplay(); }
         function closeCheckout() { document.getElementById('modal-checkout').classList.add('hidden'); syncCustomerDisplay(); }
-        
-        function processImage(input) { const f = input.files[0]; if(f){ const r = new FileReader(); r.onload = e => { const img = new Image(); img.onload = () => { const cvs = document.createElement('canvas'); let w = img.width; let h = img.height; const max = 250; if(w > max || h > max) { if(w > h) { h = Math.round((h * max) / w); w = max; } else { w = Math.round((w * max) / h); h = max; } } cvs.width = w; cvs.height = h; cvs.getContext('2d').drawImage(img, 0, 0, w, h); compressedImageBase64 = cvs.toDataURL('image/jpeg', 0.6); document.getElementById('inv-img-preview').src = compressedImageBase64; document.getElementById('inv-img-wrap').classList.remove('hidden'); }; img.src = e.target.result; }; r.readAsDataURL(f); } }
+
+        async function compressImageVariants(file, maxMain = 1280, maxThumb = 320, quality = 0.75) {
+            const objectUrl = URL.createObjectURL(file);
+            try {
+                const img = await new Promise((resolve, reject) => {
+                    const i = new Image();
+                    i.onload = () => resolve(i);
+                    i.onerror = reject;
+                    i.src = objectUrl;
+                });
+                const drawAndExport = (maxSize) => {
+                    const canvas = document.createElement('canvas');
+                    let w = img.width;
+                    let h = img.height;
+                    const longest = Math.max(w, h);
+                    if (longest > maxSize) {
+                        const ratio = maxSize / longest;
+                        w = Math.round(w * ratio);
+                        h = Math.round(h * ratio);
+                    }
+                    canvas.width = w;
+                    canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    let out = canvas.toDataURL('image/webp', quality);
+                    if (!out.startsWith('data:image/webp')) out = canvas.toDataURL('image/jpeg', quality);
+                    return out;
+                };
+                return { full: drawAndExport(maxMain), thumb: drawAndExport(maxThumb) };
+            } finally {
+                URL.revokeObjectURL(objectUrl);
+            }
+        }
+
+        async function processImage(input) {
+            const f = input.files[0];
+            if (!f) return;
+            try {
+                const result = await compressImageVariants(f, 1280, 320, 0.78);
+                compressedImageBase64 = result.full;
+                compressedImageThumbBase64 = result.thumb;
+                document.getElementById('inv-img-preview').src = compressedImageThumbBase64;
+                document.getElementById('inv-img-wrap').classList.remove('hidden');
+            } catch (e) {
+                console.error(e);
+                vNotify("ไม่สามารถประมวลผลรูปภาพได้", "ผิดพลาด", "❌");
+            } finally {
+                input.value = '';
+            }
+        }
         async function uploadStaticQR(input) { const f = input.files[0]; if(f){ const r = new FileReader(); r.onload = e => { const img = new Image(); img.onload = async () => { const cvs = document.createElement('canvas'); let w = img.width; let h = img.height; const max = 600; if(w > max || h > max) { if(w > h) { h = Math.round((h * max) / w); w = max; } else { w = Math.round((w * max) / h); h = max; } } cvs.width = w; cvs.height = h; cvs.getContext('2d').drawImage(img, 0, 0, w, h); let conf = await vdb.settings.get('config'); conf.staticQrImg = cvs.toDataURL('image/jpeg', 0.8); await vdb.settings.put(conf); document.getElementById('set-static-qr-preview').src = conf.staticQrImg; document.getElementById('set-static-qr-preview').classList.remove('hidden'); document.getElementById('set-static-qr-label').classList.add('hidden'); }; img.src = e.target.result; }; r.readAsDataURL(f); } }
         async function uploadLogo(input) { const f = input.files[0]; if(f){ const r = new FileReader(); r.onload = e => { const img = new Image(); img.onload = async () => { const cvs = document.createElement('canvas'); let w = img.width; let h = img.height; const max = 150; if(w > max || h > max) { if(w > h) { h = Math.round((h * max) / w); w = max; } else { w = Math.round((w * max) / h); h = max; } } cvs.width = w; cvs.height = h; cvs.getContext('2d').drawImage(img, 0, 0, w, h); let conf = await vdb.settings.get('config'); conf.logo = cvs.toDataURL('image/jpeg', 0.7); await vdb.settings.put(conf); applySettingsToUI(conf); }; img.src = e.target.result; }; r.readAsDataURL(f); } }
-        
+
         // 🟢 --- อัปเกรด Scanner ให้สแกนแช่ได้ (Continuous Mode) ---
         let isScanningProcess = false;
-        function startScanner(t) { 
+        function startScanner(t) {
             const modal = document.getElementById('scanner-modal');
-            modal.classList.remove('hidden'); 
-            
+            modal.classList.remove('hidden');
+
             setTimeout(async () => {
                 try {
                     if (html5QrScanner) {
@@ -971,31 +1065,31 @@
 
                     html5QrScanner = new Html5Qrcode("reader");
                     await html5QrScanner.start(
-                        { facingMode: "environment" }, 
+                        { facingMode: "environment" },
                         { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
-                        async (txt) => { 
+                        async (txt) => {
                             if(isScanningProcess) return; // 🟢 ป้องกันการสแกนรัวเกินไป
                             isScanningProcess = true;
-                            
-                            if(t === 'pos') { 
-                                const inventory = await vdb.inventory.toArray(); 
-                                const i = inventory.find(inv => inv.barcode === txt); 
-                                if(i) { 
-                                    addToCart(i.id); 
+
+                            if(t === 'pos') {
+                                const inventory = await vdb.inventory.toArray();
+                                const i = inventory.find(inv => inv.barcode === txt);
+                                if(i) {
+                                    addToCart(i.id);
                                     showToast(`✅ เพิ่ม ${i.name} ลงตะกร้าแล้ว!`); // โชว์ Popup
                                 } else {
                                     playSound('warn');
                                     showToast(`❌ ไม่พบสินค้าบาร์โค้ด: ${txt}`);
                                 }
-                                await renderPOS(); 
+                                await renderPOS();
                                 // 🟢 หน่วงเวลา 1.5 วิ ค่อยเปิดรับสแกนชิ้นต่อไป (กล้องไม่ปิด)
                                 setTimeout(() => { isScanningProcess = false; }, 1500);
-                            } else { 
-                                document.getElementById('inv-barcode').value = txt; 
+                            } else {
+                                document.getElementById('inv-barcode').value = txt;
                                 playSound('success');
                                 stopScanner(); // ถ้าอยู่หน้าสต็อก ให้ปิดกล้องไปเลย
                                 isScanningProcess = false;
-                            } 
+                            }
                         }
                     );
                 } catch (err) {
@@ -1006,16 +1100,16 @@
             }, 300);
         }
 
-        function stopScanner() { 
+        function stopScanner() {
             if(html5QrScanner) {
-                html5QrScanner.stop().then(() => { 
-                    document.getElementById('scanner-modal').classList.add('hidden'); 
-                    html5QrScanner = null; 
+                html5QrScanner.stop().then(() => {
+                    document.getElementById('scanner-modal').classList.add('hidden');
+                    html5QrScanner = null;
                 }).catch(() => {
-                    document.getElementById('scanner-modal').classList.add('hidden'); 
+                    document.getElementById('scanner-modal').classList.add('hidden');
                 });
             } else {
-                document.getElementById('scanner-modal').classList.add('hidden'); 
+                document.getElementById('scanner-modal').classList.add('hidden');
             }
         }
 
@@ -1031,12 +1125,6 @@
             if (e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) return false;
             if (e.ctrlKey && e.keyCode == 'S'.charCodeAt(0)) return false;
         };
-        setInterval(() => {
-            const _0x1 = new Date().getTime();
-            debugger; 
-            const _0x2 = new Date().getTime();
-            if (_0x2 - _0x1 > 100) { document.body.innerHTML = "<h1 style='color:red; text-align:center; margin-top:50px; font-family:sans-serif;'>⚠️ ตรวจพบการพยายามดัดแปลงระบบ!</h1>"; }
-        }, 2000);
     </script>
 </body>
 </html>
