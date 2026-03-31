@@ -2,7 +2,7 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  const APP_VERSION = '11.3.0';
+  const APP_VERSION = '11.3.1';
 
   const storedAppVersion = localStorage.getItem('vpos-app-version');
   if (storedAppVersion !== APP_VERSION) {
@@ -124,7 +124,7 @@
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="./icon-192.png">
 
-    <title>PosThaiban V11.3.0</title>
+    <title>PosThaiban V11.3.1</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -242,7 +242,7 @@
                         <span id="net-txt" class="text-[9px] font-bold text-emerald-500 uppercase">Online</span>
                     </div>
                 </div>
-                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.3.0 PRO (STABLE OFFLINE)</p>
+                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.3.1 PRO (STABLE OFFLINE)</p>
             </div>
         </div>
         <div class="flex gap-2">
@@ -1098,12 +1098,11 @@
                     if(data.settings && data.inventory) {
                         const backupHWID = data?.metadata?.hwid;
                         if(!backupHWID) {
-                            await vNotify("ไม่สามารถนำเข้าข้อมูลได้: ไฟล์สำรองไม่มี HWID ต้นทาง", "คำเตือนระบบ", "⛔");
-                            return;
-                        }
-                        if(backupHWID !== currentHWID) {
-                            await vNotify("ไม่สามารถนำเข้าข้อมูลได้: ไฟล์สำรองนี้ไม่ได้สร้างจากเครื่องนี้ (HWID ไม่ตรงกัน)", "คำเตือนระบบ", "⛔");
-                            return;
+                            const proceedNoHWID = await vConfirm("ไฟล์สำรองนี้ไม่มี HWID ต้นทาง อาจเป็นไฟล์จากเวอร์ชันเก่า ต้องการนำเข้าต่อหรือไม่?", "ยืนยันการคืนค่า", "⚠️");
+                            if(!proceedNoHWID) return;
+                        } else if(backupHWID !== currentHWID) {
+                            const proceedMismatch = await vConfirm("HWID ของไฟล์สำรองไม่ตรงกับเครื่องนี้ ต้องการนำเข้าต่อหรือไม่? (ข้อมูลปัจจุบันจะถูกแทนที่ทั้งหมด)", "ยืนยันการคืนค่า", "⚠️");
+                            if(!proceedMismatch) return;
                         }
                         await vdb.transaction('rw', vdb.settings, vdb.inventory, vdb.sales, async () => {
                             await vdb.settings.clear(); await vdb.settings.put(data.settings);
