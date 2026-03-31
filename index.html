@@ -2,7 +2,7 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  const APP_VERSION = '11.3.1';
+  const APP_VERSION = '11.3.2';
 
   const storedAppVersion = localStorage.getItem('vpos-app-version');
   if (storedAppVersion !== APP_VERSION) {
@@ -124,7 +124,7 @@
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="./icon-192.png">
 
-    <title>PosThaiban V11.3.1</title>
+    <title>PosThaiban V11.3.2</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -242,7 +242,7 @@
                         <span id="net-txt" class="text-[9px] font-bold text-emerald-500 uppercase">Online</span>
                     </div>
                 </div>
-                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.3.1 PRO (STABLE OFFLINE)</p>
+                <p class="text-[9px] opacity-40 tracking-widest mt-1 font-black uppercase">V11.3.2 PRO (STABLE OFFLINE)</p>
             </div>
         </div>
         <div class="flex gap-2">
@@ -782,6 +782,7 @@
         let isAdmin = localStorage.getItem('vpos_admin') === 'true';
         let currentRange = 'today'; let compressedImageBase64 = ""; let compressedImageThumbBase64 = "";
         let audioCtx; let html5QrScanner = null;
+        let scannerStopInProgress = false;
         let customerWindow = null;
         let inventoryCache = [];
         let selectedCategory = 'ทั้งหมด';
@@ -1255,20 +1256,57 @@
 
         // 🟢 --- อัปเกรด Scanner ให้สแกนแช่ได้ (Continuous Mode) ---
         let isScanningProcess = false;
+        const isMobileDevice = () => /android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
+
+        async function forceReleaseCameraTracks() {
+            const reader = document.getElementById('reader');
+            if (!reader) return;
+            reader.querySelectorAll('video').forEach((videoEl) => {
+                const mediaStream = videoEl.srcObject;
+                if (mediaStream && typeof mediaStream.getTracks === 'function') {
+                    mediaStream.getTracks().forEach((track) => {
+                        try { track.stop(); } catch (_) {}
+                    });
+                }
+                videoEl.srcObject = null;
+                videoEl.removeAttribute('src');
+                videoEl.load?.();
+            });
+        }
+
+        async function stopScanner() {
+            const modal = document.getElementById('scanner-modal');
+            modal.classList.add('hidden');
+            isScanningProcess = false;
+
+            if (scannerStopInProgress) return;
+            scannerStopInProgress = true;
+
+            try {
+                if (html5QrScanner) {
+                    await html5QrScanner.stop().catch(() => {});
+                    await html5QrScanner.clear().catch(() => {});
+                }
+            } finally {
+                html5QrScanner = null;
+                await forceReleaseCameraTracks();
+                scannerStopInProgress = false;
+            }
+        }
+
         function startScanner(t) {
             const modal = document.getElementById('scanner-modal');
             modal.classList.remove('hidden');
 
             setTimeout(async () => {
                 try {
-                    if (html5QrScanner) {
-                        await html5QrScanner.stop().catch(() => {});
-                        html5QrScanner = null;
-                    }
+                    await stopScanner();
+                    modal.classList.remove('hidden');
 
                     html5QrScanner = new Html5Qrcode("reader");
+                    const cameraConfig = isMobileDevice() ? { facingMode: { ideal: 'environment' } } : { facingMode: 'environment' };
                     await html5QrScanner.start(
-                        { facingMode: "environment" },
+                        cameraConfig,
                         { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
                         async (txt) => {
                             if(isScanningProcess) return; // 🟢 ป้องกันการสแกนรัวเกินไป
@@ -1301,19 +1339,6 @@
                     stopScanner();
                 }
             }, 300);
-        }
-
-        function stopScanner() {
-            if(html5QrScanner) {
-                html5QrScanner.stop().then(() => {
-                    document.getElementById('scanner-modal').classList.add('hidden');
-                    html5QrScanner = null;
-                }).catch(() => {
-                    document.getElementById('scanner-modal').classList.add('hidden');
-                });
-            } else {
-                document.getElementById('scanner-modal').classList.add('hidden');
-            }
         }
 
         async function handleInstallButtonClick() {
