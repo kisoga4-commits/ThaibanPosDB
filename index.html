@@ -89,11 +89,9 @@
         .catch((err) => console.error('SW Error:', err));
     }, { once: true });
 
-    let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (refreshing) return;
-      refreshing = true;
-      window.location.reload();
+      // ไม่ force reload อัตโนมัติ เพื่อลดความเสี่ยงแท็บหลักถูกรีโหลดแล้วชนกับ duplicate-tab lock
+      // ให้ใช้งาน session ปัจจุบันต่อได้ตามปกติ และค่อยรับไฟล์เวอร์ชันใหม่ในรอบถัดไป
     });
   }
 

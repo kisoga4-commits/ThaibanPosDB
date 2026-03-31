@@ -4,6 +4,7 @@
  */
 
 const CACHE_NAME = 'posthaiban-shell-v11-2-7';
+const SHELL_CACHE_PREFIX = 'posthaiban-shell-';
 const APP_SHELL = [
   './',
   './index.html',
@@ -28,7 +29,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+      keys
+        .filter((key) => key.startsWith(SHELL_CACHE_PREFIX) && key !== CACHE_NAME)
+        .map((key) => caches.delete(key))
     )).then(() => self.clients.claim())
   );
 });
