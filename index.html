@@ -2,7 +2,7 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  const APP_VERSION = '11.3.4';
+  const APP_VERSION = '11.3.5';
   const APP_CACHE_PREFIX = 'posthaiban-shell-';
   const RELOAD_GUARD_KEY = 'vpos-sw-reloaded-once';
 
@@ -128,7 +128,7 @@
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="./icon-192.png">
 
-    <title>PosThaiban V11.3.4</title>
+    <title>PosThaiban V11.3.5</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -1160,14 +1160,23 @@
             syncCustomerDisplay(finalSrc);
         }
 
+        const normalizeBarcode = (value) => String(value || '').trim();
+
+        function findInventoryByBarcode(inventory, barcode) {
+            const normalized = normalizeBarcode(barcode);
+            if (!normalized) return null;
+            return inventory.find((item) => normalizeBarcode(item.barcode) === normalized) || null;
+        }
+
         let barcodeBuffer = ''; let barcodeTimer = null;
         window.addEventListener('keydown', async (e) => {
             if(document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
             if(e.key.length === 1) {
-                barcodeBuffer += e.key; clearTimeout(barcodeTimer); barcodeTimer = setTimeout(() => { barcodeBuffer = ''; }, 50);
+                barcodeBuffer += e.key; clearTimeout(barcodeTimer); barcodeTimer = setTimeout(() => { barcodeBuffer = ''; }, 120);
             } else if(e.key === 'Enter' && barcodeBuffer.length > 2) {
                 const inventory = await vdb.inventory.toArray();
-                const item = inventory.find(i => i.barcode === barcodeBuffer);
+                const item = findInventoryByBarcode(inventory, barcodeBuffer);
                 if(item) { addToCart(item.id); showToast(`✅ เพิ่ม ${item.name} ลงตะกร้าแล้ว`); } else playSound('warn');
                 barcodeBuffer = '';
             }
@@ -1176,7 +1185,7 @@
         async function handleSearchScanner(e) {
             if(e.key === 'Enter') {
                 const val = e.target.value.trim(); const inventory = await vdb.inventory.toArray();
-                const item = inventory.find(i => i.barcode === val);
+                const item = findInventoryByBarcode(inventory, val);
                 if(item) { addToCart(item.id); e.target.value = ''; showToast(`✅ เพิ่ม ${item.name} ลงตะกร้าแล้ว`); } else if(val) playSound('warn');
             }
         }
@@ -1341,22 +1350,23 @@
         async function onScannerDecode(txt) {
             if(isScanningProcess) return; // 🟢 ป้องกันการสแกนรัวเกินไป
             isScanningProcess = true;
+            const decodedBarcode = normalizeBarcode(txt);
 
             if(scanTargetPage === 'pos') {
                 const inventory = await vdb.inventory.toArray();
-                const i = inventory.find(inv => inv.barcode === txt);
+                const i = findInventoryByBarcode(inventory, decodedBarcode);
                 if(i) {
                     addToCart(i.id);
                     showToast(`✅ เพิ่ม ${i.name} ลงตะกร้าแล้ว!`); // โชว์ Popup
                 } else {
                     playSound('warn');
-                    showToast(`❌ ไม่พบสินค้าบาร์โค้ด: ${txt}`);
+                    showToast(`❌ ไม่พบสินค้าบาร์โค้ด: ${decodedBarcode}`);
                 }
                 await renderPOS();
                 // 🟢 หน่วงเวลา 1.5 วิ ค่อยเปิดรับสแกนชิ้นต่อไป (กล้องไม่ปิด)
                 setTimeout(() => { isScanningProcess = false; }, 1500);
             } else {
-                document.getElementById('inv-barcode').value = txt;
+                document.getElementById('inv-barcode').value = decodedBarcode;
                 playSound('success');
                 stopScanner(); // ถ้าอยู่หน้าสต็อก ให้ปิดกล้องไปเลย
                 isScanningProcess = false;
