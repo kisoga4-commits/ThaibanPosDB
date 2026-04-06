@@ -2,7 +2,7 @@
 <html lang="th">
 <link rel="manifest" href="manifest.json">
 <script>
-  const APP_VERSION = '11.3.6';
+  const APP_VERSION = '11.3.7';
   const APP_CACHE_PREFIX = 'posthaiban-shell-';
   const RELOAD_GUARD_KEY = 'vpos-sw-reloaded-once';
 
@@ -128,7 +128,7 @@
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="./icon-192.png">
 
-    <title>PosThaiban V11.3.6</title>
+    <title>PosThaiban V11.3.7</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -1346,24 +1346,38 @@
         }
 
         async function startCameraWithFallback(scanner) {
-            const scannerConfig = { fps: SCANNER_FPS, qrbox: SCANNER_BOX, aspectRatio: 1.0 };
+            const scannerConfig = { fps: SCANNER_FPS, qrbox: SCANNER_BOX };
+            if (!isMobileDevice()) scannerConfig.aspectRatio = 1.0;
+
             const attempts = [];
-            if (isMobileDevice()) attempts.push({ facingMode: { exact: 'environment' } });
-            attempts.push({ facingMode: { ideal: 'environment' } });
-            attempts.push({ facingMode: 'environment' });
-            attempts.push({ facingMode: 'user' });
+            const addAttempt = (cameraInput) => {
+                const key = typeof cameraInput === 'string' ? `id:${cameraInput}` : JSON.stringify(cameraInput);
+                if (!attempts.some((item) => item.key === key)) attempts.push({ key, cameraInput });
+            };
+
+            if (isMobileDevice()) addAttempt({ facingMode: { exact: 'environment' } });
+            addAttempt({ facingMode: { ideal: 'environment' } });
+            addAttempt({ facingMode: 'environment' });
 
             try {
                 const cameras = await Html5Qrcode.getCameras();
                 if (Array.isArray(cameras) && cameras.length > 0) {
-                    const rearCam = cameras.find((cam) => /(back|rear|environment)/i.test(cam.label || ''));
-                    if (rearCam?.id) attempts.unshift(rearCam.id);
-                    else if (cameras[0].id) attempts.unshift(cameras[0].id);
+                    const rearRegex = /(back|rear|environment|หลัง|trás|tras|hinten)/i;
+                    const frontRegex = /(front|user|facetime|หน้า|frente|vorne)/i;
+                    const rearCams = cameras.filter((cam) => rearRegex.test(cam.label || ''));
+                    const frontCams = cameras.filter((cam) => frontRegex.test(cam.label || ''));
+                    const unknownCams = cameras.filter((cam) => !rearRegex.test(cam.label || '') && !frontRegex.test(cam.label || ''));
+
+                    [...rearCams, ...unknownCams, ...frontCams].forEach((cam) => {
+                        if (cam?.id) addAttempt(cam.id);
+                    });
                 }
             } catch (_) {}
 
+            addAttempt({ facingMode: 'user' });
+
             let lastErr = null;
-            for (const cameraInput of attempts) {
+            for (const { cameraInput } of attempts) {
                 try {
                     await scanner.start(cameraInput, scannerConfig, onScannerDecode);
                     return;
